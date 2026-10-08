@@ -1298,67 +1298,6 @@
     }
     .wl-act-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
     .wl-act-btn.danger:hover { border-color: var(--down); color: var(--down); background: #FEE2E2; }
-    .wl-act-btn.rt-yahoo {
-      background: #FEF9C3;
-      color: #854D0E;
-      border-color: #FDE047;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-    }
-    .wl-act-btn.rt-yahoo:hover {
-      background: #FEF08A;
-      border-color: #EAB308;
-      color: #713F12;
-    }
-    .wl-act-btn.rt-twse {
-      background: #EFF6FF;
-      color: #1E40AF;
-      border-color: #BFDBFE;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-    }
-    .wl-act-btn.rt-twse:hover {
-      background: #DBEAFE;
-      border-color: #3B82F6;
-      color: #1E3A8A;
-    }
-    .wl-rt-chip {
-      font-size: 0.60rem;
-      font-weight: 700;
-      padding: 1px 6px;
-      border-radius: 4px;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-      line-height: 1.4;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .wl-rt-chip.yahoo {
-      background: #FEF9C3;
-      color: #854D0E;
-      border: 1px solid #FDE047;
-    }
-    .wl-rt-chip.yahoo:hover {
-      background: #FEF08A;
-      color: #713F12;
-    }
-    .wl-rt-chip.twse {
-      background: #EFF6FF;
-      color: #1E40AF;
-      border: 1px solid #BFDBFE;
-    }
-    .wl-rt-chip.twse:hover {
-      background: #DBEAFE;
-      color: #1E3A8A;
-    }
     .wl-move-btn {
       width: 22px;
       height: 22px;
@@ -68724,7 +68663,36 @@ function setWlBiasCeiling(val) {
   }
 }
 
-// ── 批次刷新清單內所有股票的最新收盤價與MA20乖離 ──
+// ── 輔助函式：取得股票最新即時報價（優先 TWSE MIS 官方即時撮合，支援上市 tse 與上櫃 otc）──
+async function _fetchWlRealtimePrice(stockId) {
+  for (const mkt of ['tse', 'otc']) {
+    try {
+      const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${mkt}_${stockId}.tw&json=1&delay=0`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(3500) });
+      if (res.ok) {
+        const j = await res.json();
+        const d = j?.msgArray?.[0];
+        const rawZ = (d?.z && d.z !== '-') ? d.z : (d?.trade?.z && d.trade.z !== '-' ? d.trade.z : '');
+        const rawY = (d?.y && d.y !== '-') ? d.y : '';
+        const px = parseFloat(rawZ || rawY || '0');
+        if (px > 0) {
+          const isReal = !!rawZ;
+          const tStr = (d?.trade?.t || d?.t || '').slice(0, 5);
+          return {
+            price: px.toFixed(2),
+            time: tStr,
+            date: d?.d ? `${d.d.slice(0,4)}-${d.d.slice(4,6)}-${d.d.slice(6,8)}` : '',
+            isRealtime: isReal,
+            name: d?.n || ''
+          };
+        }
+      }
+    } catch(e) {}
+  }
+  return null;
+}
+
+// ── 批次刷新清單內所有股票的最新價格與MA20乖離 ──
 let _wlRefreshing = false;
 async function wlRefreshPrices() {
   if (_wlRefreshing) return;
@@ -68734,44 +68702,69 @@ async function wlRefreshPrices() {
   _wlRefreshing = true;
   const bar = document.getElementById('wlPriceUpdateBar');
   const btn = document.getElementById('wlRefreshBtn');
-  if (bar) { bar.style.display = 'block'; bar.textContent = '🔄 正在更新最新收盤價與乖離率…'; }
+  if (bar) { bar.style.display = 'block'; bar.textContent = '🔄 正在同步最新即時股價與乖離率…'; }
   if (btn) btn.disabled = true;
 
   const end   = new Date();
   const start = new Date(); start.setDate(end.getDate() - 35); // 抓近35天以計算MA20與乖離率
   let updated = 0;
+  let rtCount = 0;
 
   for (const item of list) {
+    let gotPrice = false;
+
+    // 1. 優先嘗試 TWSE MIS 盤中官方即時報價（免 Token、0 秒撮合）
     try {
+      const rt = await _fetchWlRealtimePrice(item.id);
+      if (rt && parseFloat(rt.price) > 0) {
+        item.price      = rt.price;
+        item.priceDate  = rt.date || new Date().toISOString().slice(0, 10);
+        item.priceTime  = rt.time || '';
+        item.isRealtime = rt.isRealtime;
+        if (rt.name && (!item.name || item.name === item.id)) item.name = rt.name;
+        gotPrice = true;
+        if (rt.isRealtime) rtCount++;
+      }
+    } catch(e) {}
+
+    // 2. 透過 FinMind 取得歷史日線（主動清除記憶體快取以防鎖舊資料），計算 MA20 均線與月線乖離率
+    try {
+      const ck = `TaiwanStockPrice|${item.id}|${fmtDate(start)}|${fmtDate(end)}`;
+      delete _fmCache[ck];
       const rows = await fetchFM('TaiwanStockPrice', item.id, start, end);
       if (rows && rows.length > 0) {
-        // 取日期最新一筆
         const latest = rows.slice().sort((a,b) => b.date.localeCompare(a.date))[0];
-        if (latest && latest.close) {
+        // 若前面未取到即時價，以 FinMind 最新結算收盤價為準
+        if (!gotPrice && latest && latest.close) {
           item.price      = parseFloat(latest.close).toFixed(2);
-          item.priceDate  = latest.date;  // 記錄資料日期
-          const validCloses = rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>+r.close).filter(c=>c>0);
-          if (validCloses.length >= 20) {
-            const ma20 = validCloses.slice(-20).reduce((a,b)=>a+b,0) / 20;
-            const lc = validCloses.at(-1);
-            if (ma20 > 0 && lc > 0) {
-              item.ma20Bias = parseFloat(((lc - ma20) / ma20 * 100).toFixed(1));
-            }
+          item.priceDate  = latest.date;
+          item.isRealtime = false;
+          gotPrice = true;
+        }
+        // 重新精準計算 MA20 與乖離率
+        const validCloses = rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>+r.close).filter(c=>c>0);
+        if (validCloses.length >= 20) {
+          const ma20 = validCloses.slice(-20).reduce((a,b)=>a+b,0) / 20;
+          const currPx = parseFloat(item.price);
+          if (ma20 > 0 && currPx > 0) {
+            item.ma20Bias = parseFloat(((currPx - ma20) / ma20 * 100).toFixed(1));
           }
-          updated++;
         }
       }
-    } catch(e) { /* 靜默失敗，保留舊價 */ }
-    await sleep(80); // 控制 API 頻率
+    } catch(e) {}
+
+    if (gotPrice) updated++;
+    await sleep(60); // 控制 API 頻率
   }
 
   saveWatchlist(list);
   renderWatchlist();
 
   const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
   if (bar) {
-    bar.textContent = `✅ 已更新 ${updated}/${list.length} 支收盤價 · ${timeStr}`;
+    const modeTxt = rtCount > 0 ? `⚡ 即時更新 ${rtCount} 檔` : `收盤價`;
+    bar.textContent = `✅ 已更新 ${updated}/${list.length} 檔 (${modeTxt}) · ${timeStr}`;
     setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
   }
   if (btn) btn.disabled = false;
@@ -69445,15 +69438,11 @@ function renderWatchlist() {
           <button class="wl-move-btn" onclick="wlMoveDown('${w.id}', event)" title="向下移動" ${isLast ? 'disabled' : ''}>▼</button>
         </div>
       </div>
-      <div class="wl-item-row2" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;">
+      <div class="wl-item-row2">
         <span class="wl-date">🕐 ${dateStr}</span>
-        ${w.price ? `<span style="color:var(--fg2);font-weight:600;font-size:0.72rem;">收盤 $${w.price}${w.priceDate ? '<span style="color:var(--fg3);font-weight:400;margin-left:3px;">(' + w.priceDate.slice(5) + ')</span>' : ''}</span>` : '<span style="color:var(--fg3);font-size:0.68rem;">股價載入中…</span>'}
+        ${w.price ? `<span style="color:var(--fg2);font-weight:600;font-size:0.72rem;">${w.isRealtime ? '<span style="color:#059669;font-weight:700;">⚡ 現價</span>' : '收盤'} $${w.price}${w.isRealtime && w.priceTime ? '<span style="color:var(--fg3);font-weight:400;margin-left:3px;">(' + w.priceTime + ')</span>' : (w.priceDate ? '<span style="color:var(--fg3);font-weight:400;margin-left:3px;">(' + w.priceDate.slice(5) + ')</span>' : '')}</span>` : '<span style="color:var(--fg3);font-size:0.68rem;">股價載入中…</span>'}
         ${biasBadgeHtml}
         ${!hasBuy ? `<span style="font-size:0.65rem;color:var(--fg3);">尚未記錄持倉</span>` : ''}
-        <span class="wl-rt-links" style="margin-left:auto;display:inline-flex;align-items:center;gap:3px;">
-          <a href="https://tw.stock.yahoo.com/quote/${w.id}" target="_blank" rel="noopener noreferrer" class="wl-rt-chip yahoo" onclick="event.stopPropagation()" title="【方案一】Yahoo 股市 0 秒即時行情">⚡ Yahoo</a>
-          <a href="https://mis.twse.com.tw/stock/fibest.jsp?stock=${w.id}" target="_blank" rel="noopener noreferrer" class="wl-rt-chip twse" onclick="event.stopPropagation()" title="【方案二】臺灣證交所官方 MIS 盤口五檔">🏛️ 證交所</a>
-        </span>
       </div>
 
       <!-- 操作按鈕 -->
@@ -69461,8 +69450,6 @@ function renderWatchlist() {
         <button class="wl-act-btn" onclick="wlMoveUp('${w.id}', event)" title="向上移動一格" ${isFirst ? 'disabled style="opacity:0.35;"' : ''}>▲ 上移</button>
         <button class="wl-act-btn" onclick="wlMoveDown('${w.id}', event)" title="向下移動一格" ${isLast ? 'disabled style="opacity:0.35;"' : ''}>▼ 下移</button>
         <button class="wl-act-btn" onclick="wlQuery('${w.id}')">🔍 查詢</button>
-        <a class="wl-act-btn rt-yahoo" href="https://tw.stock.yahoo.com/quote/${w.id}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="【方案一】Yahoo 股市 0 秒即時報價">⚡ Yahoo即時</a>
-        <a class="wl-act-btn rt-twse" href="https://mis.twse.com.tw/stock/fibest.jsp?stock=${w.id}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="【方案二】臺灣證券交易所官方 MIS 盤口">🏛️ 證交所MIS</a>
         <button class="wl-act-btn" onclick="wlTogglePosition('${w.id}')">💰 持倉記錄</button>
         <button class="wl-act-btn" onclick="wlToggleNote('${w.id}')">📝 備註</button>
         <button class="wl-act-btn" onclick="wlOpenAlertForStock('${w.id}')" title="設定此股警示條件" style="color:#EA580C;">🔔</button>
