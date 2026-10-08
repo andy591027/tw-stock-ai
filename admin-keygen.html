@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>台股AI分析器 — 授權碼管理</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; padding: 24px; }
+h1 { color: #f8fafc; font-size: 1.4rem; margin-bottom: 4px; }
+.sub { color: #64748b; font-size: 0.83rem; margin-bottom: 24px; }
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 14px; }
+label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px; margin-top: 10px; }
+input, select { width: 100%; padding: 9px 12px; border-radius: 7px; border: 1px solid #475569;
+  background: #0f172a; color: #f8fafc; font-size: 0.9rem; outline: none; }
+input:focus { border-color: #3b82f6; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+button { padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 0.9rem; font-weight: 600; transition: opacity .15s; }
+button:hover { opacity: .85; }
+.btn-primary { background: #3b82f6; color: #fff; width: 100%; margin-top: 12px; }
+.btn-danger  { background: #ef4444; color: #fff; padding: 5px 10px; font-size: 0.78rem; }
+.btn-sm      { background: #334155; color: #94a3b8; padding: 5px 10px; font-size: 0.78rem; }
+.result { margin-top: 12px; padding: 12px; border-radius: 8px; background: #0f172a;
+  font-family: monospace; font-size: 0.85rem; word-break: break-all; display: none; }
+.result.ok  { border: 1px solid #22c55e; color: #86efac; }
+.result.err { border: 1px solid #ef4444; color: #fca5a5; }
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+th { text-align: left; padding: 8px 10px; color: #64748b; border-bottom: 1px solid #334155; }
+td { padding: 8px 10px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; }
+.badge.active   { background: rgba(34,197,94,.15); color: #86efac; }
+.badge.expired  { background: rgba(245,158,11,.15); color: #fcd34d; }
+.badge.revoked  { background: rgba(239,68,68,.15);  color: #fca5a5; }
+.key-val { font-family: monospace; font-size: 0.8rem; color: #93c5fd; cursor: pointer; }
+.key-val:hover { text-decoration: underline; }
+#loginWall { position: fixed; inset: 0; background: #0f172a; display: flex;
+  align-items: center; justify-content: center; z-index: 99; }
+#loginBox { background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+  padding: 36px; width: 320px; text-align: center; }
+#loginBox h2 { color: #f8fafc; margin-bottom: 8px; }
+#loginBox p  { color: #64748b; font-size: 0.82rem; margin-bottom: 20px; }
+#loginMsg { color: #f87171; font-size: 0.8rem; margin-top: 10px; min-height: 18px; }
+.notice { background: #1e3a5f; border: 1px solid #2563eb; border-radius: 8px;
+  padding: 12px 14px; font-size: 0.8rem; color: #93c5fd; margin-top: 12px; line-height: 1.6; }
+.notice code { background: #0f172a; padding: 1px 6px; border-radius: 4px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<!-- 改等級浮層 -->
+<div id="tierEditWall" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:98;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:14px;padding:28px;width:320px;">
+    <h2 style="color:#f8fafc;font-size:1rem;margin-bottom:4px;">✏️ 修改會員等級</h2>
+    <p style="color:#64748b;font-size:0.8rem;margin-bottom:16px;">授權碼不變，只改等級，用戶不用重新輸入。</p>
+    <div style="font-family:monospace;font-size:0.8rem;color:#93c5fd;margin-bottom:14px;" id="tierEditKeyLabel"></div>
+    <label>新的會員等級</label>
+    <select id="tierEditSelect">
+      <option value="standard">Standard（一般會員）</option>
+      <option value="vip">VIP</option>
+      <option value="premium">尊爵</option>
+      <option value="admin">Admin（永久，管理員專用）</option>
+    </select>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn-sm" style="flex:1;" onclick="closeTierEditor()">取消</button>
+      <button class="btn-primary" style="flex:1;margin-top:0;" onclick="saveTierEdit()">儲存</button>
+    </div>
+    <div id="tierEditMsg" style="font-size:0.8rem;margin-top:10px;min-height:18px;"></div>
+  </div>
+</div>
+
+<!-- 改到期日／續約浮層 -->
+<div id="expiryEditWall" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:98;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:14px;padding:28px;width:320px;">
+    <h2 style="color:#f8fafc;font-size:1rem;margin-bottom:4px;">📅 修改到期日 / 續約</h2>
+    <p style="color:#64748b;font-size:0.8rem;margin-bottom:16px;">授權碼不變，只改到期日，用戶不用重新輸入。</p>
+    <div style="font-family:monospace;font-size:0.8rem;color:#93c5fd;margin-bottom:14px;" id="expiryEditKeyLabel"></div>
+    <label>快速續約（從原到期日往後延，過期的從今天算）</label>
+    <div style="display:flex;gap:6px;margin-bottom:4px;">
+      <button class="btn-sm" style="flex:1;" onclick="quickExtend(1)">+1個月</button>
+      <button class="btn-sm" style="flex:1;" onclick="quickExtend(3)">+3個月</button>
+      <button class="btn-sm" style="flex:1;" onclick="quickExtend(12)">+1年</button>
+    </div>
+    <label>或直接指定新的到期日</label>
+    <input id="expiryEditInput" type="date" />
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn-sm" style="flex:1;" onclick="closeExpiryEditor()">取消</button>
+      <button class="btn-primary" style="flex:1;margin-top:0;" onclick="saveExpiryEdit()">儲存</button>
+    </div>
+    <div id="expiryEditMsg" style="font-size:0.8rem;margin-top:10px;min-height:18px;"></div>
+  </div>
+</div>
+
+<!-- 改姓名／Email浮層 -->
+<div id="contactEditWall" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:98;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:14px;padding:28px;width:320px;">
+    <h2 style="color:#f8fafc;font-size:1rem;margin-bottom:4px;">👤 修改姓名 / Email</h2>
+    <p style="color:#64748b;font-size:0.8rem;margin-bottom:16px;">授權碼不變，用戶不用重新輸入。Email只是方便你聯繫，不影響登入驗證。</p>
+    <div style="font-family:monospace;font-size:0.8rem;color:#93c5fd;margin-bottom:14px;" id="contactEditKeyLabel"></div>
+    <label>用戶姓名 / 備註</label>
+    <input id="contactEditUser" type="text" placeholder="例：王小明" />
+    <label>Email</label>
+    <input id="contactEditEmail" type="email" placeholder="例：example@mail.com" />
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn-sm" style="flex:1;" onclick="closeContactEditor()">取消</button>
+      <button class="btn-primary" style="flex:1;margin-top:0;" onclick="saveContactEdit()">儲存</button>
+    </div>
+    <div id="contactEditMsg" style="font-size:0.8rem;margin-top:10px;min-height:18px;"></div>
+  </div>
+</div>
+
+<!-- 登入牆 -->
+<div id="loginWall">
+  <div id="loginBox">
+    <div style="font-size:2rem;margin-bottom:10px;">🔐</div>
+    <h2>管理員登入</h2>
+    <p>台股AI分析器 授權碼管理後台</p>
+    <input id="adminPwInput" type="password" placeholder="管理員密碼" style="margin-bottom:10px;" />
+    <button class="btn-primary" onclick="adminLogin()" style="margin-top:0;">登入</button>
+    <div id="loginMsg"></div>
+  </div>
+</div>
+
+<h1>🔑 台股AI分析器 — 授權碼管理</h1>
+<p class="sub">管理員後台 · 個人授權碼發放與撤銷</p>
+
+<!-- 產生個人碼 -->
+<div class="card">
+  <h2>➕ 產生新授權碼</h2>
+  <div class="row">
+    <div>
+      <label>用戶姓名 / 備註</label>
+      <input id="genUser" type="text" placeholder="例：王小明" />
+    </div>
+    <div>
+      <label>有效期限</label>
+      <input id="genExpiry" type="date" />
+    </div>
+  </div>
+  <label>Email（選填，方便聯繫）</label>
+  <input id="genEmail" type="email" placeholder="例：example@mail.com" />
+  <label>會員等級</label>
+  <select id="genTier">
+    <option value="standard">Standard（一般會員）</option>
+    <option value="vip">VIP</option>
+    <option value="premium">尊爵</option>
+    <option value="admin">Admin（永久，管理員專用）</option>
+  </select>
+  <button class="btn-primary" onclick="generateKey()">產生授權碼</button>
+  <div id="genResult" class="result"></div>
+</div>
+
+<!-- 用戶清單 -->
+<div class="card">
+  <h2>👥 目前授權用戶</h2>
+  <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+    <button class="btn-sm" onclick="loadKeys()">🔄 重新載入</button>
+    <span id="bulkBar" style="display:none; gap:8px; align-items:center;">
+      <span id="bulkCount" style="color:#94a3b8; font-size:0.82rem;"></span>
+      <button class="btn-danger" onclick="bulkRevoke()">批次撤銷</button>
+      <button class="btn-danger" style="background:#7f1d1d;" onclick="bulkDelete()">批次刪除</button>
+    </span>
+  </div>
+  <div id="keyTable">載入中…</div>
+</div>
+
+<!-- 一次性遷移（舊 Firestore/Cloud Run 系統 → license-worker） -->
+<div class="card">
+  <h2>🚚 一次性遷移舊系統資料</h2>
+  <p class="sub" style="margin-bottom:12px;">把舊系統（Cloud Run + Firestore）裡的授權碼搬進這個新的
+    license-worker 後台。⚠️ 只需要執行一次，執行前會先預覽清單、
+    需要你確認後才會真的寫入，重複執行同一筆資料會覆蓋成同樣的內容
+    （不會造成重複）。</p>
+  <label>舊系統管理密碼（Cloud Run 那組，跟這個後台的登入密碼不同）</label>
+  <input id="oldAdminSecret" type="password" placeholder="舊系統的 admin_secret" />
+  <label>遷移後預設等級（舊資料沒有 tier 概念，統一先給這個等級，之後可以再個別調整）</label>
+  <select id="migrateDefaultTier">
+    <option value="standard">Standard（一般會員）</option>
+    <option value="vip" selected>VIP</option>
+    <option value="premium">尊爵</option>
+  </select>
+  <button class="btn-primary" onclick="previewMigration()" style="margin-top:12px;">① 預覽舊系統資料</button>
+  <div id="migratePreview" style="display:none;margin-top:12px;">
+    <div id="migratePreviewTable" style="max-height:240px;overflow:auto;"></div>
+    <button class="btn-primary" onclick="runMigration()" style="background:#f59e0b;margin-top:10px;">
+      ② 確認無誤，執行遷移
+    </button>
+  </div>
+  <div id="migrateResult" class="result"></div>
+</div>
+
+<!-- 月份碼（共用） -->
+<div class="card">
+  <h2>📅 本月共用授權碼（管理員）</h2>
+  <div class="row">
+    <div>
+      <label>月份</label>
+      <input id="hmacMonth" type="month" />
+    </div>
+  </div>
+  <button class="btn-primary" onclick="genHmac()" style="margin-top:12px;">產生月份碼</button>
+  <div id="hmacResult" class="result"></div>
+</div>
+
+<script>
+// v7.54：改接自己的 license-worker（Cloudflare Worker），不再打來源不明、
+// 無法查證是否支援 tier 欄位的舊 Cloud Run 服務。
+const API = 'https://license-worker.dvorak0727.workers.dev';
+const OLD_API = 'https://stock-api-214539875795.asia-east1.run.app'; // 只有「遷移」功能還會用到
+let ADMIN_SECRET = '';
+const TIER_LABEL = { standard:'Standard', vip:'VIP', premium:'尊爵', admin:'Admin' };
+
+// 用戶姓名/Email是自由輸入欄位，可能含單引號、<>等字元，列表渲染時用這兩個
+// helper分別處理「顯示在HTML裡」跟「塞進onclick='...'字串參數裡」兩種情境，
+// 避免名字裡的符號把屬性字串或畫面排版弄壞。
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function jsStr(s) {
+  return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+function adminLogin() {
+  const pw = document.getElementById('adminPwInput').value.trim();
+  if (!pw) return;
+  ADMIN_SECRET = pw;
+  // 測試是否正確
+  fetch(`${API}/admin/list?admin_secret=${encodeURIComponent(pw)}`)
+    .then(r => r.json())
+    .then(j => {
+      if (Array.isArray(j.keys)) {
+        document.getElementById('loginWall').style.display = 'none';
+        loadKeys();
+        // 預設今天加一個月
+        const d = new Date(); d.setMonth(d.getMonth()+1); d.setDate(0);
+        document.getElementById('genExpiry').value = d.toISOString().slice(0,10);
+        document.getElementById('hmacMonth').value = new Date().toISOString().slice(0,7);
+      } else {
+        document.getElementById('loginMsg').textContent = '密碼錯誤';
+      }
+    })
+    .catch(() => { document.getElementById('loginMsg').textContent = '連線失敗'; });
+}
+
+document.getElementById('adminPwInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') adminLogin();
+});
+
+async function generateKey() {
+  const user   = document.getElementById('genUser').value.trim() || 'user';
+  const email  = document.getElementById('genEmail').value.trim();
+  const expiry = document.getElementById('genExpiry').value;
+  const tier   = document.getElementById('genTier').value;
+  if (!expiry) { alert('請選擇有效期限'); return; }
+
+  const r = await fetch(`${API}/admin/generate?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&user=${encodeURIComponent(user)}&email=${encodeURIComponent(email)}&expiry=${expiry}&tier=${tier}`);
+  const j = await r.json();
+  const el = document.getElementById('genResult');
+  if (j.key) {
+    el.className = 'result ok';
+    el.style.display = 'block';
+    el.innerHTML = `✅ 授權碼：<strong>${j.key}</strong><br/>用戶：${j.user}　有效期：${j.expiry}　等級：${TIER_LABEL[j.tier]||j.tier}<br/><br/>
+      <span style="color:#64748b;font-size:0.75rem;">點擊複製授權碼</span>`;
+    el.onclick = () => { navigator.clipboard.writeText(j.key); el.style.background='#1a2e1a'; setTimeout(()=>el.style.background='',800); };
+    loadKeys();
+  } else {
+    el.className = 'result err';
+    el.style.display = 'block';
+    el.textContent = '產生失敗：' + JSON.stringify(j);
+  }
+}
+
+async function loadKeys() {
+  const r = await fetch(`${API}/admin/list?admin_secret=${encodeURIComponent(ADMIN_SECRET)}`);
+  const j = await r.json();
+  const el = document.getElementById('keyTable');
+  if (!j.keys || j.keys.length === 0) {
+    el.innerHTML = '<div style="color:#64748b;font-size:0.85rem;padding:8px 0;">目前沒有個人授權碼。</div>';
+    return;
+  }
+  const today = new Date().toISOString().slice(0,10);
+  // 排序：有效 → 已過期 → 已撤銷（撤銷的往下移，不要跟還有效的混在一起）
+  const statusRank = k => {
+    if (k.status === 'revoked') return 2;
+    if (k.tier !== 'admin' && k.expiry && k.expiry < today) return 1;
+    return 0;
+  };
+  const sortedKeys = [...j.keys].sort((a, b) => statusRank(a) - statusRank(b));
+  const rows = sortedKeys.map(k => {
+    const rank = statusRank(k);
+    let badge;
+    if (rank === 2) badge = '<span class="badge revoked">已撤銷</span>';
+    else if (rank === 1) badge = '<span class="badge expired">已過期</span>';
+    else badge = '<span class="badge active">有效</span>';
+    return `<tr>
+      <td><input type="checkbox" class="row-check" value="${k.key}" onchange="updateBulkBar()"></td>
+      <td><span class="key-val" onclick="navigator.clipboard.writeText('${k.key}');this.style.color='#86efac';setTimeout(()=>this.style.color='',800)" title="點擊複製">${k.key}</span></td>
+      <td>${escHtml(k.user) || '—'}</td>
+      <td>${k.email ? `<a href="mailto:${escHtml(k.email)}" style="color:#93c5fd;">${escHtml(k.email)}</a>` : '—'}</td>
+      <td>${TIER_LABEL[k.tier] || k.tier || '—'}</td>
+      <td>${k.tier === 'admin' ? '永久' : (k.expiry || '—')}</td>
+      <td>${badge}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn-sm" onclick="openContactEditor('${jsStr(k.key)}','${jsStr(k.user)}','${jsStr(k.email)}')">改姓名/Email</button>
+        ${rank !== 2 && k.tier !== 'admin' ? `<button class="btn-sm" onclick="openExpiryEditor('${k.key}','${k.expiry||''}')">改到期日</button>` : ''}
+        ${rank !== 2 ? `<button class="btn-sm" onclick="openTierEditor('${k.key}','${k.tier}')">改等級</button>` : ''}
+        ${rank !== 2 ? `<button class="btn-danger" onclick="revokeKey('${k.key}')">撤銷</button>` : ''}
+        <button class="btn-danger" style="background:#7f1d1d;" onclick="deleteKey('${k.key}')">刪除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th><input type="checkbox" id="checkAll" onchange="toggleAllChecks(this.checked)"></th>
+      <th>授權碼</th><th>用戶</th><th>Email</th><th>等級</th><th>到期日</th><th>狀態</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  updateBulkBar();
+}
+
+async function revokeKey(key) {
+  if (!confirm(`確定要撤銷授權碼 ${key} 嗎？撤銷後該用戶會立刻失去存取權限。（撤銷是保留紀錄、標記停用，還想恢復可以再處理；如果確定以後都不會用到，用「刪除」直接永久移除）`)) return;
+  const r = await fetch(`${API}/admin/revoke?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(key)}`);
+  const j = await r.json();
+  if (j.ok) loadKeys();
+  else alert('撤銷失敗：' + JSON.stringify(j));
+}
+
+// ── 改等級（不重新產生授權碼，就地修改）──
+let _tierEditKey = null;
+function openTierEditor(key, currentTier) {
+  _tierEditKey = key;
+  document.getElementById('tierEditKeyLabel').textContent = key;
+  document.getElementById('tierEditSelect').value = currentTier || 'standard';
+  document.getElementById('tierEditMsg').textContent = '';
+  document.getElementById('tierEditWall').style.display = 'flex';
+}
+function closeTierEditor() {
+  document.getElementById('tierEditWall').style.display = 'none';
+  _tierEditKey = null;
+}
+async function saveTierEdit() {
+  if (!_tierEditKey) return;
+  const newTier = document.getElementById('tierEditSelect').value;
+  const msg = document.getElementById('tierEditMsg');
+  msg.style.color = '#94a3b8';
+  msg.textContent = '儲存中…';
+  try {
+    const r = await fetch(`${API}/admin/update?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(_tierEditKey)}&tier=${newTier}`);
+    const j = await r.json();
+    if (j.ok) {
+      closeTierEditor();
+      loadKeys();
+    } else {
+      msg.style.color = '#f87171';
+      msg.textContent = '儲存失敗：' + (j.msg || j.error || JSON.stringify(j));
+    }
+  } catch (e) {
+    msg.style.color = '#f87171';
+    msg.textContent = '連線失敗：' + e.message;
+  }
+}
+
+// ── 改到期日／續約（不重新產生授權碼，就地修改，沿用/admin/update的expiry參數）──
+let _expiryEditKey = null;
+let _expiryEditBaseDate = null; // 快速續約的計算基準：原到期日跟今天比較晚的那個
+function openExpiryEditor(key, currentExpiry) {
+  _expiryEditKey = key;
+  document.getElementById('expiryEditKeyLabel').textContent = key;
+  const today = new Date().toISOString().slice(0,10);
+  // 已過期的續約要從「今天」開始算，還沒過期的從「原到期日」開始算，
+  // 不然會變成往過去的日期加月份，續約完還是過期的，沒意義。
+  _expiryEditBaseDate = (currentExpiry && currentExpiry > today) ? currentExpiry : today;
+  document.getElementById('expiryEditInput').value = currentExpiry || today;
+  document.getElementById('expiryEditMsg').textContent = '';
+  document.getElementById('expiryEditWall').style.display = 'flex';
+}
+function closeExpiryEditor() {
+  document.getElementById('expiryEditWall').style.display = 'none';
+  _expiryEditKey = null;
+}
+function quickExtend(months) {
+  const base = new Date(_expiryEditBaseDate + 'T00:00:00');
+  base.setMonth(base.getMonth() + months);
+  document.getElementById('expiryEditInput').value = base.toISOString().slice(0,10);
+}
+async function saveExpiryEdit() {
+  if (!_expiryEditKey) return;
+  const newExpiry = document.getElementById('expiryEditInput').value;
+  const msg = document.getElementById('expiryEditMsg');
+  if (!newExpiry) { msg.style.color = '#f87171'; msg.textContent = '請選擇日期'; return; }
+  msg.style.color = '#94a3b8';
+  msg.textContent = '儲存中…';
+  try {
+    const r = await fetch(`${API}/admin/update?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(_expiryEditKey)}&expiry=${newExpiry}`);
+    const j = await r.json();
+    if (j.ok) {
+      closeExpiryEditor();
+      loadKeys();
+    } else {
+      msg.style.color = '#f87171';
+      msg.textContent = '儲存失敗：' + (j.msg || j.error || JSON.stringify(j));
+    }
+  } catch (e) {
+    msg.style.color = '#f87171';
+    msg.textContent = '連線失敗：' + e.message;
+  }
+}
+
+// ── 改姓名／Email（不重新產生授權碼，就地修改，沿用/admin/update的user+email參數）──
+let _contactEditKey = null;
+function openContactEditor(key, currentUser, currentEmail) {
+  _contactEditKey = key;
+  document.getElementById('contactEditKeyLabel').textContent = key;
+  document.getElementById('contactEditUser').value = currentUser || '';
+  document.getElementById('contactEditEmail').value = currentEmail || '';
+  document.getElementById('contactEditMsg').textContent = '';
+  document.getElementById('contactEditWall').style.display = 'flex';
+}
+function closeContactEditor() {
+  document.getElementById('contactEditWall').style.display = 'none';
+  _contactEditKey = null;
+}
+async function saveContactEdit() {
+  if (!_contactEditKey) return;
+  const newUser = document.getElementById('contactEditUser').value.trim();
+  const newEmail = document.getElementById('contactEditEmail').value.trim();
+  const msg = document.getElementById('contactEditMsg');
+  if (!newUser) { msg.style.color = '#f87171'; msg.textContent = '姓名不能留空'; return; }
+  msg.style.color = '#94a3b8';
+  msg.textContent = '儲存中…';
+  try {
+    const r = await fetch(`${API}/admin/update?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(_contactEditKey)}&user=${encodeURIComponent(newUser)}&email=${encodeURIComponent(newEmail)}`);
+    const j = await r.json();
+    if (j.ok) {
+      closeContactEditor();
+      loadKeys();
+    } else {
+      msg.style.color = '#f87171';
+      msg.textContent = '儲存失敗：' + (j.msg || j.error || JSON.stringify(j));
+    }
+  } catch (e) {
+    msg.style.color = '#f87171';
+    msg.textContent = '連線失敗：' + e.message;
+  }
+}
+
+async function deleteKey(key) {
+  if (!confirm(`⚠️ 確定要永久刪除授權碼 ${key} 嗎？這個動作無法復原，紀錄會從資料庫整個消失，不是只是停用。`)) return;
+  const r = await fetch(`${API}/admin/delete?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(key)}`);
+  const j = await r.json();
+  if (j.ok) loadKeys();
+  else alert('刪除失敗：' + JSON.stringify(j));
+}
+
+// ── 批次勾選 / 批次執行 ──
+function getCheckedKeys() {
+  return Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+}
+function toggleAllChecks(checked) {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+  updateBulkBar();
+}
+function updateBulkBar() {
+  const n = getCheckedKeys().length;
+  const bar = document.getElementById('bulkBar');
+  document.getElementById('bulkCount').textContent = n ? `已勾選 ${n} 筆` : '';
+  bar.style.display = n ? 'inline-flex' : 'none';
+  // 全選框：勾選數等於總筆數時打勾，部分勾選時顯示「部分勾選」樣式
+  const all = document.querySelectorAll('.row-check');
+  const checkAll = document.getElementById('checkAll');
+  if (checkAll) {
+    checkAll.checked = n > 0 && n === all.length;
+    checkAll.indeterminate = n > 0 && n < all.length;
+  }
+}
+
+async function bulkRevoke() {
+  const keys = getCheckedKeys();
+  if (!keys.length) return;
+  if (!confirm(`確定要一次撤銷這 ${keys.length} 筆授權碼嗎？撤銷後這些用戶會立刻失去存取權限。`)) return;
+  const results = await Promise.allSettled(keys.map(key =>
+    fetch(`${API}/admin/revoke?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(key)}`).then(r => r.json())
+  ));
+  const failed = results.filter(r => r.status === 'rejected' || !r.value?.ok).length;
+  alert(`批次撤銷完成：成功 ${keys.length - failed} 筆${failed ? `，失敗 ${failed} 筆` : ''}`);
+  loadKeys();
+}
+
+async function bulkDelete() {
+  const keys = getCheckedKeys();
+  if (!keys.length) return;
+  if (!confirm(`⚠️ 確定要一次永久刪除這 ${keys.length} 筆授權碼嗎？這個動作無法復原！`)) return;
+  if (!confirm(`再次確認：真的要永久刪除 ${keys.length} 筆嗎？刪除後資料完全消失，撤銷還能保留紀錄，刪除不行。`)) return;
+  const results = await Promise.allSettled(keys.map(key =>
+    fetch(`${API}/admin/delete?admin_secret=${encodeURIComponent(ADMIN_SECRET)}&key=${encodeURIComponent(key)}`).then(r => r.json())
+  ));
+  const failed = results.filter(r => r.status === 'rejected' || !r.value?.ok).length;
+  alert(`批次刪除完成：成功 ${keys.length - failed} 筆${failed ? `，失敗 ${failed} 筆` : ''}`);
+  loadKeys();
+}
+
+// ── 一次性遷移：舊 Cloud Run/Firestore 系統 → license-worker ──
+let _migrationData = null;
+
+async function previewMigration() {
+  const oldSecret = document.getElementById('oldAdminSecret').value.trim();
+  const el = document.getElementById('migrateResult');
+  if (!oldSecret) { alert('請輸入舊系統的管理密碼'); return; }
+  el.className = 'result'; el.style.display = 'none';
+  try {
+    const r = await fetch(`${OLD_API}?action=list&admin_secret=${encodeURIComponent(oldSecret)}`);
+    const j = await r.json();
+    if (!Array.isArray(j.keys)) throw new Error('舊系統回傳格式不對，或密碼錯誤：' + JSON.stringify(j));
+    _migrationData = j.keys;
+    const rows = j.keys.map(k => `<tr>
+      <td>${k.key}</td><td>${k.user || '—'}</td><td>${k.expiry || '—'}</td>
+    </tr>`).join('');
+    document.getElementById('migratePreviewTable').innerHTML = `<table>
+      <thead><tr><th>授權碼</th><th>用戶</th><th>到期日</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    document.getElementById('migratePreview').style.display = 'block';
+    el.className = 'result ok'; el.style.display = 'block';
+    el.textContent = `✅ 讀到舊系統 ${j.keys.length} 筆資料，確認上面清單無誤後按下面「執行遷移」。`;
+  } catch (e) {
+    el.className = 'result err'; el.style.display = 'block';
+    el.textContent = '讀取舊系統失敗：' + e.message;
+  }
+}
+
+async function runMigration() {
+  if (!_migrationData || !_migrationData.length) { alert('請先預覽資料'); return; }
+  if (!confirm(`確定要把這 ${_migrationData.length} 筆資料寫進 license-worker 嗎？`)) return;
+  const defaultTier = document.getElementById('migrateDefaultTier').value;
+  const records = _migrationData.map(k => ({
+    key: k.key, user: k.user || '', expiry: k.expiry || '',
+    tier: defaultTier, status: 'active',
+  }));
+  const el = document.getElementById('migrateResult');
+  try {
+    const r = await fetch(`${API}/admin/import`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_secret: ADMIN_SECRET, records }),
+    });
+    const j = await r.json();
+    el.className = 'result ok'; el.style.display = 'block';
+    el.textContent = `✅ 遷移完成：匯入 ${j.imported} 筆，跳過 ${j.skipped} 筆（缺授權碼或到期日）。`;
+    document.getElementById('migratePreview').style.display = 'none';
+    loadKeys();
+  } catch (e) {
+    el.className = 'result err'; el.style.display = 'block';
+    el.textContent = '遷移失敗：' + e.message;
+  }
+}
+
+async function genHmac() {
+  const monthInput = document.getElementById('hmacMonth').value; // YYYY-MM
+  if (!monthInput) { alert('請選擇月份'); return; }
+  const month = monthInput.replace('-',''); // YYYYMM
+  const secret = 'tsai2026stock';
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+    {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(month));
+  const hex = Array.from(new Uint8Array(sig)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,8).toUpperCase();
+  const code = `TSAI-${month}-${hex}`;
+  const el = document.getElementById('hmacResult');
+  el.className = 'result ok';
+  el.style.display = 'block';
+  el.innerHTML = `月份碼：<strong>${code}</strong><br/><span style="color:#64748b;font-size:0.75rem;">點擊複製</span>`;
+  el.onclick = () => { navigator.clipboard.writeText(code); el.style.background='#1a2e1a'; setTimeout(()=>el.style.background='',800); };
+}
+</script>
+</body>
+</html>
