@@ -1298,6 +1298,67 @@
     }
     .wl-act-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
     .wl-act-btn.danger:hover { border-color: var(--down); color: var(--down); background: #FEE2E2; }
+    .wl-act-btn.rt-yahoo {
+      background: #FEF9C3;
+      color: #854D0E;
+      border-color: #FDE047;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    .wl-act-btn.rt-yahoo:hover {
+      background: #FEF08A;
+      border-color: #EAB308;
+      color: #713F12;
+    }
+    .wl-act-btn.rt-twse {
+      background: #EFF6FF;
+      color: #1E40AF;
+      border-color: #BFDBFE;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    .wl-act-btn.rt-twse:hover {
+      background: #DBEAFE;
+      border-color: #3B82F6;
+      color: #1E3A8A;
+    }
+    .wl-rt-chip {
+      font-size: 0.60rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      line-height: 1.4;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .wl-rt-chip.yahoo {
+      background: #FEF9C3;
+      color: #854D0E;
+      border: 1px solid #FDE047;
+    }
+    .wl-rt-chip.yahoo:hover {
+      background: #FEF08A;
+      color: #713F12;
+    }
+    .wl-rt-chip.twse {
+      background: #EFF6FF;
+      color: #1E40AF;
+      border: 1px solid #BFDBFE;
+    }
+    .wl-rt-chip.twse:hover {
+      background: #DBEAFE;
+      color: #1E3A8A;
+    }
     .wl-move-btn {
       width: 22px;
       height: 22px;
@@ -69384,11 +69445,15 @@ function renderWatchlist() {
           <button class="wl-move-btn" onclick="wlMoveDown('${w.id}', event)" title="向下移動" ${isLast ? 'disabled' : ''}>▼</button>
         </div>
       </div>
-      <div class="wl-item-row2">
+      <div class="wl-item-row2" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;">
         <span class="wl-date">🕐 ${dateStr}</span>
         ${w.price ? `<span style="color:var(--fg2);font-weight:600;font-size:0.72rem;">收盤 $${w.price}${w.priceDate ? '<span style="color:var(--fg3);font-weight:400;margin-left:3px;">(' + w.priceDate.slice(5) + ')</span>' : ''}</span>` : '<span style="color:var(--fg3);font-size:0.68rem;">股價載入中…</span>'}
         ${biasBadgeHtml}
         ${!hasBuy ? `<span style="font-size:0.65rem;color:var(--fg3);">尚未記錄持倉</span>` : ''}
+        <span class="wl-rt-links" style="margin-left:auto;display:inline-flex;align-items:center;gap:3px;">
+          <a href="https://tw.stock.yahoo.com/quote/${w.id}" target="_blank" rel="noopener noreferrer" class="wl-rt-chip yahoo" onclick="event.stopPropagation()" title="【方案一】Yahoo 股市 0 秒即時行情">⚡ Yahoo</a>
+          <a href="https://mis.twse.com.tw/stock/fibest.jsp?stock=${w.id}" target="_blank" rel="noopener noreferrer" class="wl-rt-chip twse" onclick="event.stopPropagation()" title="【方案二】臺灣證交所官方 MIS 盤口五檔">🏛️ 證交所</a>
+        </span>
       </div>
 
       <!-- 操作按鈕 -->
@@ -69396,6 +69461,8 @@ function renderWatchlist() {
         <button class="wl-act-btn" onclick="wlMoveUp('${w.id}', event)" title="向上移動一格" ${isFirst ? 'disabled style="opacity:0.35;"' : ''}>▲ 上移</button>
         <button class="wl-act-btn" onclick="wlMoveDown('${w.id}', event)" title="向下移動一格" ${isLast ? 'disabled style="opacity:0.35;"' : ''}>▼ 下移</button>
         <button class="wl-act-btn" onclick="wlQuery('${w.id}')">🔍 查詢</button>
+        <a class="wl-act-btn rt-yahoo" href="https://tw.stock.yahoo.com/quote/${w.id}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="【方案一】Yahoo 股市 0 秒即時報價">⚡ Yahoo即時</a>
+        <a class="wl-act-btn rt-twse" href="https://mis.twse.com.tw/stock/fibest.jsp?stock=${w.id}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="【方案二】臺灣證券交易所官方 MIS 盤口">🏛️ 證交所MIS</a>
         <button class="wl-act-btn" onclick="wlTogglePosition('${w.id}')">💰 持倉記錄</button>
         <button class="wl-act-btn" onclick="wlToggleNote('${w.id}')">📝 備註</button>
         <button class="wl-act-btn" onclick="wlOpenAlertForStock('${w.id}')" title="設定此股警示條件" style="color:#EA580C;">🔔</button>
