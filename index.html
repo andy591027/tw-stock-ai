@@ -15855,19 +15855,16 @@ a.module-nav-item.acc-active {
     <button class="token-setting-btn" onclick="openTokenModal()" title="設定 FinMind API Token" id="tokenSettingBtn">
       <span id="tokenBtnIcon">🔑</span>
     </button>
-    <button class="ks-shortcut-btn" onclick="if(typeof DEMO_MODE!=='undefined'&&DEMO_MODE){alert('教學操盤是完整版功能，體驗版尚未開放。');return;}if(!isVIP()){vipModalOpen('teachCard');return;}_openTeachPanel()" title="每日5股教學操盤 (👑 VIP)" style="position:relative;border:1.5px solid #10b981;color:#10b981;">
+    <button class="ks-shortcut-btn" onclick="_openTeachPanel()" title="每日5股教學操盤" style="border:1.5px solid #10b981;color:#10b981;">
       <span class="ks-sb-icon">📚</span> 教學操盤
-      <span style="position:absolute;top:-7px;right:-6px;background:linear-gradient(135deg,#6d28d9,#7c3aed);color:#fff;font-size:0.45rem;font-weight:800;padding:1px 4px;border-radius:99px;letter-spacing:.03em;white-space:nowrap;">VIP</span>
     </button>
-    <button class="ks-shortcut-btn" onclick="if(typeof DEMO_MODE!=='undefined'&&DEMO_MODE){alert('大富翁模擬操盤是完整版功能，體驗版尚未開放。');return;}openStockSim()" title="股市大富翁模擬操盤 (👑 VIP)" style="position:relative;border:1.5px solid #f59e0b;color:#f59e0b;">
+    <button class="ks-shortcut-btn" onclick="openStockSim()" title="股市大富翁模擬操盤" style="border:1.5px solid #f59e0b;color:#f59e0b;">
       <span class="ks-sb-icon">🎲</span> 大富翁
-      <span style="position:absolute;top:-7px;right:-6px;background:linear-gradient(135deg,#6d28d9,#7c3aed);color:#fff;font-size:0.45rem;font-weight:800;padding:1px 4px;border-radius:99px;letter-spacing:.03em;white-space:nowrap;">VIP</span>
     </button>
     <a class="ks-shortcut-btn" href="#knowledgeStation"
-       onclick="if(typeof DEMO_MODE!=='undefined'&&DEMO_MODE){alert('知識站是完整版功能，體驗版尚未開放。');return false;}if(!isVIP()){vipModalOpen('knowledgeStation');return false;}setTimeout(()=>{const t=document.getElementById('knowledgeStation');if(t){window.scrollTo({top:t.getBoundingClientRect().top+window.pageYOffset-70,behavior:'smooth'});}},10);return false;"
-       title="跳至知識站 (👑 VIP)" style="position:relative;">
+       onclick="setTimeout(()=>{const t=document.getElementById('knowledgeStation');if(t){window.scrollTo({top:t.getBoundingClientRect().top+window.pageYOffset-70,behavior:'smooth'});}},10);return false;"
+       title="跳至知識站">
       <span class="ks-sb-icon">📖</span> 知識站
-      <span style="position:absolute;top:-7px;right:-6px;background:linear-gradient(135deg,#6d28d9,#7c3aed);color:#fff;font-size:0.45rem;font-weight:800;padding:1px 4px;border-radius:99px;letter-spacing:.03em;white-space:nowrap;">VIP</span>
     </a>
     <!-- ★ v7.17 OnboardingGuide 重新開啟按鈕 -->
     <button class="og-reopen-btn" onclick="ogOpen()" title="新手引導 / 操作說明">
@@ -34185,31 +34182,16 @@ let _fallback = false;
 //  切換方式：網址加 ?demo=1（例如 index.html?demo=1），
 //  正式上線前這裡還需要決定要不要跟 VIP/tier 系統掛鉤。
 // ==============================================================
-const DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1';
-const DEMO_ALLOWED_STOCKS = {
-  '2330': '台積電（大型權值股）',
-  '1216': '統一（中型股）',
-  '8454': '富邦媒（中小型股）',
-};
+const DEMO_MODE = false;
+const DEMO_ALLOWED_STOCKS = {};
 
 function _initDemoMode() {
-  if (!DEMO_MODE) return;
-  const bar = document.getElementById('demoModeBar');
-  if (bar) bar.style.display = 'flex';
-  const input = document.getElementById('searchInput');
-  if (input) input.placeholder = 'Demo版只能查這三支股票，見上方切換鈕';
-  // 體驗版：隱藏快速切換 chips（會誤導成可查任意股票），只留 Demo 切換列
-  const chips = document.querySelector('.quick-chips');
-  if (chips) chips.style.display = 'none';
+  return;
 }
 _initDemoMode();
 
-// ★ 多股票掃描類功能（海選/熱力圖/控盤矩陣…）在 Demo 模式一律鎖住。
-//   在每個掃描函式最前面呼叫 if (_demoBlockMultiStock()) return; 即可。
 function _demoBlockMultiStock() {
-  if (!DEMO_MODE) return false;
-  alert('這是全市場多股票掃描功能，體驗版尚未開放。\n體驗版僅能查詢：2330 台積電／1216 統一／8454 富邦媒。\n如需完整功能請升級付費方案。');
-  return true;
+  return false;
 }
 
 // ==============================================================
@@ -67289,8 +67271,6 @@ function ksSwitch(panelId) {
 
 // ── 通用知識庫跳轉：模組「📖 理論」按鈕使用 ──
 function goKsTab(tabId, anchorId) {
-  // VIP 門禁：知識站是 VIP 專屬
-  if (!isVIP()) { vipModalOpen('knowledgeStation'); return; }
 
   // 知識站手風琴可能是閉合的，先強制展開
   const ksWrap = document.getElementById('accWrap_knowledgeStation');
@@ -67653,84 +67633,42 @@ async function _vipFetchLicense(code) {
   return { active: true, user: j.name || '', tier: j.plan || 'standard', expiry: j.expires || '' };
 }
 
-// ── 本地快取驗證（避免每次都打 API）──
-function isVIP() {
-  try {
-    const d = JSON.parse(localStorage.getItem(VIP_KEY)||'null');
-    if (!d || !d.activated || !d.expiry) return false;
-    if (d.tier === 'admin') return true; // 管理人永久通過，不看到期日
-    // v7.55修正：這裡原本只檢查「有效期還沒過」，沒檢查 tier 本身是不是VIP，
-    // 導致 standard（一般會員）序號驗證通過後也會被判定成isVIP()=true，
-    // 直接看到所有VIP限定內容（教學操盤/大富翁/知識站）。
-    // 只有 vip/premium/admin 這幾個付費等級才算通過。
-    if (d.tier !== 'vip' && d.tier !== 'premium') return false;
-    return d.expiry >= new Date().toISOString().slice(0,10);
-  } catch { return false; }
-}
-function isAdmin() {
-  try {
-    const d = JSON.parse(localStorage.getItem(VIP_KEY)||'null');
-    return !!(d && d.tier === 'admin');
-  } catch { return false; }
-}
+// ── 本地快取驗證（全功能 VIP / 管理人永久開通）──
+function isVIP() { return true; }
+function isAdmin() { return true; }
 
-// v7.55：本機VIP快取只存在使用者瀏覽器裡，不會自動跟伺服器同步。
-// 曾經用VIP序號登入過一次，這筆「已啟用」紀錄就會一直留在localStorage，
-// 就算後來帳號被管理員降級成一般會員，本機還是會一直誤判isVIP()=true
-// （這就是圖書館志工電腦上VIP權限卡住的根因，不是每次操作都會重新
-// 問伺服器）。改成每次頁面載入時，如果本機有VIP快取，背景重打一次
-// /verify，用伺服器現在的真實tier覆蓋本機快取——伺服器說降級了就
-// 跟著降級，說序號已撤銷/過期就直接清掉本機快取。
 async function _vipRevalidate() {
   try {
-    const d = JSON.parse(localStorage.getItem(VIP_KEY) || 'null');
-    if (!d || !d.code) return; // 本機沒有VIP快取，不用做事
-    const data = await _vipFetchLicense(d.code);
-    if (!data || data.active === false) {
-      // 伺服器說這組序號現在無效/已撤銷/過期 → 清掉本機快取
-      localStorage.removeItem(VIP_KEY);
-      return;
-    }
-    // 用伺服器最新資料覆蓋本機快取（tier可能被管理員改過）
     localStorage.setItem(VIP_KEY, JSON.stringify({
-      activated: true, code: d.code,
-      user:   data.user   || d.user   || '',
-      tier:   data.tier   || 'standard',
-      expiry: data.expiry || d.expiry || '9999-12-31',
-      since:  d.since || Date.now(),
+      activated: true,
+      code: 'TSAIU-FAMILY-VIP',
+      user: '家庭尊爵版',
+      tier: 'admin',
+      expiry: '2099-12-31',
+      since: Date.now()
     }));
-  } catch(e) {
-    // 網路失敗時保留本機快取原樣（避免斷網時把正常VIP用戶誤踢出），
-    // 下次頁面載入時會再重試一次
-    console.warn('[VIP重新驗證]', e.message);
-  }
+  } catch(e) {}
 }
 document.addEventListener('DOMContentLoaded', _vipRevalidate);
 
-// 目前這台瀏覽器已經啟用、而且還沒到期的授權（任何等級都算，含「一般」）；沒有就回傳 null
 function _vipLicenseInfo() {
-  try {
-    const d = JSON.parse(localStorage.getItem(VIP_KEY) || 'null');
-    if (!d || !d.activated) return null;
-    if (d.tier !== 'admin' && d.expiry && d.expiry < new Date().toISOString().slice(0, 10)) return null;
-    return d;
-  } catch { return null; }
+  return {
+    activated: true,
+    code: 'TSAIU-FAMILY-VIP',
+    user: '家庭尊爵版',
+    tier: 'admin',
+    expiry: '2099-12-31'
+  };
 }
 
-// 尊爵（或管理人）專屬：VIP 不算。到期的授權不算。
+// 尊爵專屬：永久開通
 function isPremium() {
-  const d = _vipLicenseInfo();
-  return !!d && (d.tier === 'admin' || d.tier === 'premium');
+  return true;
 }
 
-// 功能的會員門檻：need='vip'＝VIP／尊爵／管理人；need='premium'＝只有尊爵／管理人。
+// 功能會員門檻：一律開通放行
 function _requireTier(need, featureName) {
-  if (typeof DEMO_MODE !== 'undefined' && DEMO_MODE) { alert(`${featureName}是完整版功能，體驗版尚未開放。`); return false; }
-  if (need === 'premium' ? isPremium() : isVIP()) return true;
-  if (typeof showEpicToast === 'function') {
-    showEpicToast(need === 'premium' ? `🔒 ${featureName}為尊爵專屬` : `🔒 ${featureName}需要 VIP 以上方案`, '#d97706');
-  }
-  return false;
+  return true;
 }
 
 function vipOpenPlans() {}
@@ -67740,9 +67678,7 @@ let _vipPendingModId = null;
 
 function vipModalOpen(modId) {
   _vipPendingModId = modId || null;
-  if (isVIP()) {
-    _vipUnlock();
-  }
+  _vipUnlock();
 }
 
 function _vipUnlock() {
@@ -67750,7 +67686,6 @@ function _vipUnlock() {
   if (!_vipPendingModId) return;
   const pid = _vipPendingModId;
   _vipPendingModId = null;
-  // 知識站是獨立 section，不是手風琴
   if (pid === 'knowledgeStation') {
     setTimeout(() => {
       const sec = document.getElementById('knowledgeStation');
@@ -67758,21 +67693,17 @@ function _vipUnlock() {
     }, 400);
     return;
   }
-  // 股市大富翁：直接開啟
   if (pid === 'stockSim') {
     setTimeout(() => window.open('stock-sim.html', '_blank'), 300);
     return;
   }
-  // 一般手風琴模組：展開
   const wrap = document.getElementById(`accWrap_${pid}`);
   if (wrap) wrap.classList.add('acc-open');
 }
 
-// 頁面載入時若已是 VIP，移除鎖定樣式
+// 頁面載入時自動解鎖所有手風琴
 document.addEventListener('DOMContentLoaded', () => {
-  if (isVIP()) {
-    setTimeout(_vipUnlock, 900);
-  }
+  setTimeout(_vipUnlock, 300);
 });
 
 // ==============================================================
@@ -82638,8 +82569,6 @@ function _tRenderCandleCard(s, raw, dayIdx, targetKey, isSim, idx) {
 
 // ─── 股市大富翁 ───
 function openStockSim() {
-  if (typeof DEMO_MODE !== 'undefined' && DEMO_MODE) { alert('大富翁模擬操盤是完整版功能，體驗版尚未開放。'); return; }
-  if (!isVIP()) { vipModalOpen('stockSim'); return; }
   window.open('stock-sim.html', '_blank');
 }
 
@@ -83166,27 +83095,16 @@ if (typeof _origRenderSM === 'function') {
       const header = document.createElement('div');
       header.className = 'mod-acc-header';
       const ksBtn = mod.ksTab
-        ? `<button class="mod-ks-btn" onclick="event.stopPropagation();${mod.vip ? `if(!isVIP()){vipModalOpen('${mod.id}');return;}` : ''}goKsTab('${mod.ksTab}'${mod.ksAnchor ? `,'${mod.ksAnchor}'` : ''})" title="跳到知識庫了解原理">📖 理論</button>`
+        ? `<button class="mod-ks-btn" onclick="event.stopPropagation();goKsTab('${mod.ksTab}'${mod.ksAnchor ? `,'${mod.ksAnchor}'` : ''})" title="跳到知識庫了解原理">📖 理論</button>`
         : '';
-      const vipBadge = mod.vip ? `<span class="mod-vip-badge">👑 VIP</span>` : '';
-      const isDemoLocked = typeof DEMO_MODE !== 'undefined' && DEMO_MODE && !DEMO_ALLOWED_MOD_IDS.includes(mod.id);
-      const demoBadge = isDemoLocked ? `<span class="mod-demo-badge">🔒 完整版</span>` : '';
       header.innerHTML =
         `<span class="mod-acc-emoji">${mod.emoji}</span>` +
         `<span class="mod-acc-label">${mod.label}</span>` +
-        vipBadge +
-        demoBadge +
         `<span class="mod-acc-why">💡 ${mod.why}</span>` +
         ksBtn +
         `<span class="mod-acc-toggle">▼</span>`;
-      if (mod.vip) wrap.classList.add('vip-locked');
-      if (isDemoLocked) wrap.classList.add('demo-locked');
       header.addEventListener('click', () => {
-        if (isDemoLocked) {
-          alert(`「${mod.label}」是完整版功能，體驗版尚未開放。\n體驗版開放：開盤壓力表／大盤脈搏／獲利品質／本益比／籌碼總覽／技術指標／籌碼週期。`);
-          return;
-        }
-        toggleMod(mod.id, mod.vip);
+        toggleMod(mod.id, false);
       });
 
       const body = document.createElement('div');
@@ -83265,15 +83183,6 @@ if (typeof _origRenderSM === 'function') {
   }
 
   function toggleMod(id, isVipRequired) {
-    if (typeof DEMO_MODE !== 'undefined' && DEMO_MODE && !DEMO_ALLOWED_MOD_IDS.includes(id)) {
-      const label = (MODS.find(m => m.id === id) || {}).label || id;
-      alert(`「${label}」是完整版功能，體驗版尚未開放。\n體驗版開放：開盤壓力表／大盤脈搏／獲利品質／本益比／籌碼總覽／技術指標／籌碼週期。`);
-      return;
-    }
-    if (isVipRequired && !isVIP()) {
-      vipModalOpen(id);
-      return;
-    }
     // 教學操盤：開啟每日5股浮動視窗，不展開手風琴
     if (id === 'teachCard') {
       _openTeachPanel();
@@ -83285,11 +83194,6 @@ if (typeof _origRenderSM === 'function') {
   }
 
   function activateMod(id) {
-    if (typeof DEMO_MODE !== 'undefined' && DEMO_MODE && !DEMO_ALLOWED_MOD_IDS.includes(id)) {
-      const label = (MODS.find(m => m.id === id) || {}).label || id;
-      alert(`「${label}」是完整版功能，體驗版尚未開放。\n體驗版開放：開盤壓力表／大盤脈搏／獲利品質／本益比／籌碼總覽／技術指標／籌碼週期。`);
-      return;
-    }
     MODS.forEach(m => {
       const w = document.getElementById(`accWrap_${m.id}`);
       if (w) w.classList.remove('acc-open');
@@ -83303,9 +83207,7 @@ if (typeof _origRenderSM === 'function') {
   }
 
   function expandAllMods() {
-    const demoOn = typeof DEMO_MODE !== 'undefined' && DEMO_MODE;
     MODS.forEach(m => {
-      if (demoOn && !DEMO_ALLOWED_MOD_IDS.includes(m.id)) return;
       const w = document.getElementById(`accWrap_${m.id}`);
       if (w) w.classList.add('acc-open');
     });
