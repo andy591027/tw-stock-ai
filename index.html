@@ -68663,7 +68663,7 @@ function setWlBiasCeiling(val) {
   }
 }
 
-// ── 輔助函式：取得股票最新即時報價（優先 TWSE MIS 官方即時撮合，支援上市 tse 與上櫃 otc）──
+// ── 輔助函式：取得股票最新即時報價（優先 TWSE MIS 官方即時撮合）──
 async function _fetchWlRealtimePrice(stockId) {
   for (const mkt of ['tse', 'otc']) {
     try {
@@ -68692,6 +68692,31 @@ async function _fetchWlRealtimePrice(stockId) {
   return null;
 }
 
+// ── 輔助函式：臺灣證券交易所官方盤後 STOCK_DAY（有 CORS、免 Token、13:30收盤後第一時間發布）──
+async function _fetchTwseOfficialClose(stockId) {
+  try {
+    const now = new Date();
+    const dStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const url = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=${dStr}&stockNo=${stockId}&response=json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const j = await res.json();
+      if (j.stat === 'OK' && Array.isArray(j.data) && j.data.length > 0) {
+        const lastRow = j.data[j.data.length - 1];
+        const rocDate = String(lastRow[0]).split('/');
+        if (rocDate.length === 3) {
+          const greDate = `${parseInt(rocDate[0], 10) + 1911}-${rocDate[1]}-${rocDate[2]}`;
+          const closePx = parseFloat(String(lastRow[6]).replace(/,/g, ''));
+          if (closePx > 0) {
+            return { price: closePx.toFixed(2), date: greDate };
+          }
+        }
+      }
+    }
+  } catch(e) {}
+  return null;
+}
+
 // ── 批次刷新清單內所有股票的最新價格與MA20乖離 ──
 let _wlRefreshing = false;
 async function wlRefreshPrices() {
@@ -68702,18 +68727,31 @@ async function wlRefreshPrices() {
   _wlRefreshing = true;
   const bar = document.getElementById('wlPriceUpdateBar');
   const btn = document.getElementById('wlRefreshBtn');
-  if (bar) { bar.style.display = 'block'; bar.textContent = '🔄 正在同步最新即時股價與乖離率…'; }
+  if (bar) { bar.style.display = 'block'; bar.innerHTML = '🔄 正在連線官方證交所與資料庫同步最新價格…'; }
   if (btn) btn.disabled = true;
+
+  // 強制清除記憶體快取與 localStorage 中對應的日線快取，確保向伺服器拉最新資料
+  window._fmBustUntil = Date.now() + 60000;
+  window._fmBustStamp = Date.now();
+  for (const item of list) {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(_FM_LS_PREFIX + `TaiwanStockPrice|${item.id}|`)) {
+        localStorage.removeItem(k);
+      }
+    }
+  }
 
   const end   = new Date();
   const start = new Date(); start.setDate(end.getDate() - 35); // 抓近35天以計算MA20與乖離率
   let updated = 0;
   let rtCount = 0;
+  let newestDateFound = '';
 
   for (const item of list) {
     let gotPrice = false;
 
-    // 1. 優先嘗試 TWSE MIS 盤中官方即時報價（免 Token、0 秒撮合）
+    // 1. 優先嘗試盤中即時報價（若環境支援 MIS 撮合）
     try {
       const rt = await _fetchWlRealtimePrice(item.id);
       if (rt && parseFloat(rt.price) > 0) {
@@ -68727,20 +68765,36 @@ async function wlRefreshPrices() {
       }
     } catch(e) {}
 
-    // 2. 透過 FinMind 取得歷史日線（主動清除記憶體快取以防鎖舊資料），計算 MA20 均線與月線乖離率
+    // 2. 嘗試臺灣證券交易所官方盤後 STOCK_DAY（免 Token、支援 CORS，13:30 收盤後率先發布）
+    if (!gotPrice) {
+      try {
+        const off = await _fetchTwseOfficialClose(item.id);
+        if (off && parseFloat(off.price) > 0) {
+          item.price      = off.price;
+          item.priceDate  = off.date;
+          item.isRealtime = false;
+          gotPrice = true;
+          if (off.date > newestDateFound) newestDateFound = off.date;
+        }
+      } catch(e) {}
+    }
+
+    // 3. 透過 FinMind 取得歷史日線（已清除快取），計算 MA20 均線與月線乖離率
     try {
       const ck = `TaiwanStockPrice|${item.id}|${fmtDate(start)}|${fmtDate(end)}`;
       delete _fmCache[ck];
       const rows = await fetchFM('TaiwanStockPrice', item.id, start, end);
       if (rows && rows.length > 0) {
         const latest = rows.slice().sort((a,b) => b.date.localeCompare(a.date))[0];
-        // 若前面未取到即時價，以 FinMind 最新結算收盤價為準
+        // 若前面官方未取到，以 FinMind 最新結算收盤價為準
         if (!gotPrice && latest && latest.close) {
           item.price      = parseFloat(latest.close).toFixed(2);
           item.priceDate  = latest.date;
           item.isRealtime = false;
           gotPrice = true;
         }
+        if (latest?.date && latest.date > newestDateFound) newestDateFound = latest.date;
+
         // 重新精準計算 MA20 與乖離率
         const validCloses = rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>+r.close).filter(c=>c>0);
         if (validCloses.length >= 20) {
@@ -68760,12 +68814,27 @@ async function wlRefreshPrices() {
   saveWatchlist(list);
   renderWatchlist();
 
+  // 計算台北目前時間與時段判斷
   const now = new Date();
+  const tpe = new Date(now.getTime() + (now.getTimezoneOffset() + 480) * 60000);
+  const minOfDay = tpe.getHours() * 60 + tpe.getMinutes();
+  const isWeekday = tpe.getDay() >= 1 && tpe.getDay() <= 5;
+  const isMarketOpen = isWeekday && minOfDay >= 540 && minOfDay <= 810; // 09:00 ~ 13:30
+  const isPreSettle  = isWeekday && minOfDay > 810 && minOfDay < 960;  // 13:30 ~ 16:00
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const dateLabel = newestDateFound ? newestDateFound.slice(5) : '';
+
   if (bar) {
-    const modeTxt = rtCount > 0 ? `⚡ 即時更新 ${rtCount} 檔` : `收盤價`;
-    bar.textContent = `✅ 已更新 ${updated}/${list.length} 檔 (${modeTxt}) · ${timeStr}`;
-    setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
+    if (rtCount > 0) {
+      bar.innerHTML = `⚡ <b>已更新 ${updated}/${list.length} 檔（即時成交價）</b> · ${timeStr}`;
+    } else if (isMarketOpen) {
+      bar.innerHTML = `ℹ️ <b>盤中交易時段（今日收盤價將於 13:30 後結算）</b>：已同步最新結算收盤價 <b>(${dateLabel})</b> · ${timeStr}`;
+    } else if (isPreSettle) {
+      bar.innerHTML = `⏳ <b>收盤統計中（各資料庫約 15:30~16:00 完整發布）</b>：目前為最新已結算價 <b>(${dateLabel})</b> · ${timeStr}`;
+    } else {
+      bar.innerHTML = `✅ <b>已同步最新結算收盤價 (${dateLabel})</b> · 共 ${updated}/${list.length} 檔 · ${timeStr}`;
+    }
+    setTimeout(() => { if (bar) bar.style.display = 'none'; }, 8000);
   }
   if (btn) btn.disabled = false;
   _wlRefreshing = false;
