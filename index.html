@@ -1280,13 +1280,13 @@
       max-width: 120px;
     }
     .wl-actions {
-      display: flex; gap: 5px;
+      display: flex; gap: 4px; flex-wrap: wrap;
       margin-top: 7px;
     }
     .wl-act-btn {
-      flex: 1;
+      flex: 1 1 auto;
       font-size: 0.68rem;
-      padding: 4px 0;
+      padding: 4px 6px;
       border-radius: 6px;
       border: 1px solid var(--border2);
       background: var(--surface);
@@ -1294,9 +1294,37 @@
       cursor: pointer;
       transition: 0.15s;
       text-align: center;
+      white-space: nowrap;
     }
     .wl-act-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
     .wl-act-btn.danger:hover { border-color: var(--down); color: var(--down); background: #FEE2E2; }
+    .wl-move-btn {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      border-radius: 4px;
+      border: 1px solid var(--border2);
+      background: var(--surface);
+      color: var(--fg2);
+      cursor: pointer;
+      transition: all 0.15s;
+      line-height: 1;
+    }
+    .wl-move-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-bg);
+      transform: scale(1.08);
+    }
+    .wl-move-btn:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
 
     /* ── 持倉面板 ── */
     .wl-position-panel {
@@ -20480,7 +20508,8 @@ a.module-nav-item.acc-active {
   <!-- 工具列 -->
   <div class="wl-toolbar">
     <input type="text" class="wl-search" id="wlSearch" placeholder="🔍 搜尋代碼或名稱…" oninput="renderWatchlist()" />
-    <button class="wl-sort-btn active" id="wlSortTime" onclick="setWlSort('time')">最新</button>
+    <button class="wl-sort-btn active" id="wlSortCustom" onclick="setWlSort('custom')" title="自訂排序（支援手動上下移動）">自訂</button>
+    <button class="wl-sort-btn" id="wlSortTime" onclick="setWlSort('time')">最新</button>
     <button class="wl-sort-btn" id="wlSortCode" onclick="setWlSort('code')">代碼</button>
     <button class="wl-sort-btn" id="wlRefreshBtn" onclick="wlRefreshPrices()" title="更新所有股票最新收盤">🔄</button>
     <!-- v5.98 標籤篩選按鈕 -->
@@ -69006,7 +69035,11 @@ function _calcKD(highs, lows, closes, period=9) {
 }
 
 // ── 排序模式 ──
-let _wlSort = 'time';
+let _wlSort = (() => {
+  try {
+    return localStorage.getItem('tsai_wl_sort_mode') || 'custom';
+  } catch(e) { return 'custom'; }
+})();
 // v5.98 標籤篩選
 let _wlTagFilter = null; // null = 全部, '#買入計畫' etc.
 
@@ -69033,9 +69066,69 @@ function wlSetTagFilter(tag) {
 
 function setWlSort(mode) {
   _wlSort = mode;
-  document.getElementById('wlSortTime').classList.toggle('active', mode === 'time');
-  document.getElementById('wlSortCode').classList.toggle('active', mode === 'code');
+  try { localStorage.setItem('tsai_wl_sort_mode', mode); } catch(e){}
+  const btnCustom = document.getElementById('wlSortCustom');
+  const btnTime   = document.getElementById('wlSortTime');
+  const btnCode   = document.getElementById('wlSortCode');
+  if (btnCustom) btnCustom.classList.toggle('active', mode === 'custom');
+  if (btnTime)   btnTime.classList.toggle('active', mode === 'time');
+  if (btnCode)   btnCode.classList.toggle('active', mode === 'code');
   renderWatchlist();
+}
+
+// ── 🔼 上下移動調整追蹤清單順序 ──
+function wlMoveUp(id, e) {
+  if (e) {
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+  }
+  let list = loadWatchlist();
+  if (!list || list.length <= 1) return;
+
+  // 若目前正處於「代碼」或「最新」自動排序，先以目前顯示的排序做為自訂順序起點
+  if (_wlSort === 'code') {
+    list.sort((a,b) => a.id.localeCompare(b.id));
+  } else if (_wlSort === 'time') {
+    list.sort((a,b) => (b.lastQueried || 0) - (a.lastQueried || 0));
+  }
+
+  const idx = list.findIndex(w => String(w.id).trim() === String(id).trim());
+  if (idx <= 0) return; // 已經在最頂端
+
+  // 相鄰交換
+  const target = list[idx];
+  list[idx] = list[idx - 1];
+  list[idx - 1] = target;
+
+  saveWatchlist(list);
+  setWlSort('custom');
+}
+
+function wlMoveDown(id, e) {
+  if (e) {
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+  }
+  let list = loadWatchlist();
+  if (!list || list.length <= 1) return;
+
+  // 若目前正處於「代碼」或「最新」自動排序，先以目前顯示的排序做為自訂順序起點
+  if (_wlSort === 'code') {
+    list.sort((a,b) => a.id.localeCompare(b.id));
+  } else if (_wlSort === 'time') {
+    list.sort((a,b) => (b.lastQueried || 0) - (a.lastQueried || 0));
+  }
+
+  const idx = list.findIndex(w => String(w.id).trim() === String(id).trim());
+  if (idx < 0 || idx >= list.length - 1) return; // 已經在最底端
+
+  // 相鄰交換
+  const target = list[idx];
+  list[idx] = list[idx + 1];
+  list[idx + 1] = target;
+
+  saveWatchlist(list);
+  setWlSort('custom');
 }
 
 // ============================================================
@@ -69110,9 +69203,19 @@ function renderWatchlist() {
   // 排序
   if (_wlSort === 'code') {
     list = [...list].sort((a,b) => a.id.localeCompare(b.id));
+  } else if (_wlSort === 'time') {
+    list = [...list].sort((a,b) => (b.lastQueried || 0) - (a.lastQueried || 0));
   } else {
-    list = [...list].sort((a,b) => b.lastQueried - a.lastQueried);
+    // 'custom' 手動自訂順序：保持 loadWatchlist() 排列順序
   }
+
+  // 同步工具列按鈕 active 狀態
+  const btnCustom = document.getElementById('wlSortCustom');
+  const btnTime   = document.getElementById('wlSortTime');
+  const btnCode   = document.getElementById('wlSortCode');
+  if (btnCustom) btnCustom.classList.toggle('active', _wlSort === 'custom');
+  if (btnTime)   btnTime.classList.toggle('active', _wlSort === 'time');
+  if (btnCode)   btnCode.classList.toggle('active', _wlSort === 'code');
 
   const el    = document.getElementById('wlList');
   const total = loadWatchlist().length;
@@ -69159,7 +69262,9 @@ function renderWatchlist() {
     return;
   }
 
-  el.innerHTML = list.map(w => {
+  el.innerHTML = list.map((w, idx) => {
+    const isFirst = (idx === 0);
+    const isLast = (idx === list.length - 1);
     const dt = new Date(w.lastQueried);
     const dateStr = `${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
 
@@ -69274,6 +69379,10 @@ function renderWatchlist() {
           const tagBg    = {'#買入計畫':'#ECFDF5','#等待突破':'#FFFBEB','#觀察中':'#EFF6FF','#已獲利出場':'#D1FAE5','#停損警戒':'#FEF2F2'};
           return tags.map(t => `<span style="font-size:0.52rem;font-weight:800;padding:1px 6px;border-radius:99px;background:${tagBg[t]||'var(--surface2)'};color:${tagColors[t]||'var(--fg2)'};">${t}</span>`).join('');
         })()}
+        <div class="wl-move-group" style="margin-left:auto;display:inline-flex;align-items:center;gap:3px;" title="調整自選股排列順序">
+          <button class="wl-move-btn" onclick="wlMoveUp('${w.id}', event)" title="向上移動" ${isFirst ? 'disabled' : ''}>▲</button>
+          <button class="wl-move-btn" onclick="wlMoveDown('${w.id}', event)" title="向下移動" ${isLast ? 'disabled' : ''}>▼</button>
+        </div>
       </div>
       <div class="wl-item-row2">
         <span class="wl-date">🕐 ${dateStr}</span>
@@ -69284,6 +69393,8 @@ function renderWatchlist() {
 
       <!-- 操作按鈕 -->
       <div class="wl-actions">
+        <button class="wl-act-btn" onclick="wlMoveUp('${w.id}', event)" title="向上移動一格" ${isFirst ? 'disabled style="opacity:0.35;"' : ''}>▲ 上移</button>
+        <button class="wl-act-btn" onclick="wlMoveDown('${w.id}', event)" title="向下移動一格" ${isLast ? 'disabled style="opacity:0.35;"' : ''}>▼ 下移</button>
         <button class="wl-act-btn" onclick="wlQuery('${w.id}')">🔍 查詢</button>
         <button class="wl-act-btn" onclick="wlTogglePosition('${w.id}')">💰 持倉記錄</button>
         <button class="wl-act-btn" onclick="wlToggleNote('${w.id}')">📝 備註</button>
