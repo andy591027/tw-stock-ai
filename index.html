@@ -20488,6 +20488,8 @@ a.module-nav-item.acc-active {
     <button class="wl-scan-btn" id="wlScanBtn" onclick="wlScanBreakout()" title="掃描清單中所有股票的技術突破訊號">⚡ 突破掃描</button>
     <button class="wl-alert-btn" id="wlAlertBtn" onclick="wlToggleAlertPanel()" title="設定個股價格/技術警示條件">🔔 警示設定</button>
     <button class="wl-report-btn" id="wlReportBtn" onclick="wlGenReport()" title="產生今日追蹤清單盤後摘要日報">📰 日報</button>
+    <button class="wl-report-btn" id="wlExportBtn" onclick="wlExportBackup()" title="匯出下載追蹤清單與筆記備份 (JSON 檔)">💾 備份</button>
+    <button class="wl-report-btn" id="wlImportBtn" onclick="wlImportBackup()" title="匯入還原追蹤清單備份 (JSON 檔)">📂 還原</button>
     <button class="wl-report-btn" id="wlNotifyBtn" onclick="wlToggleNotifyPanel()" title="設定每日07:00自動寄送追蹤股票重大訊息">📧 每日通知</button>
   </div>
 
@@ -73859,7 +73861,26 @@ function _twseDrawChart(type) {
 // ── watchlist CRUD ──
 function loadWatchlist() {
   try {
-    const raw = JSON.parse(localStorage.getItem(WL_KEY) || '[]');
+    let rawStr = localStorage.getItem(WL_KEY);
+    // 🛡️ 防丟失容錯探測：若當前 WL_KEY 為空，自動探測備份與歷史版本 Key
+    if (!rawStr || rawStr === '[]' || rawStr === 'null') {
+      const fallbackKeys = ['tsai_watchlist_autobackup', 'tsai_watchlist_v1', 'tsai_watchlist', 'watchlist', 'tw_stock_watchlist'];
+      for (const fk of fallbackKeys) {
+        const val = localStorage.getItem(fk);
+        if (val && val !== '[]' && val !== 'null') {
+          try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              rawStr = val;
+              localStorage.setItem(WL_KEY, val);
+              console.info(`[Watchlist] 已從安全備份 ${fk} 自動恢復 ${parsed.length} 檔追蹤清單`);
+              break;
+            }
+          } catch(e){}
+        }
+      }
+    }
+    const raw = JSON.parse(rawStr || '[]');
     let modified = false;
     const list = raw.map(w => {
       const dbInfo = (typeof STOCK_DB !== 'undefined') ? STOCK_DB[w.id] : null;
@@ -73879,13 +73900,184 @@ function loadWatchlist() {
   } catch { return []; }
 }
 function saveWatchlist(list) {
-  localStorage.setItem(WL_KEY, JSON.stringify(list));
+  try {
+    localStorage.setItem(WL_KEY, JSON.stringify(list));
+    // 🛡️ 多重鏡像備份：只要清單非空，即時鏡像備份至安全槽，防止任何代碼更動或意外遺失
+    if (Array.isArray(list) && list.length > 0) {
+      localStorage.setItem('tsai_watchlist_autobackup', JSON.stringify(list));
+    }
+  } catch(e) {
+    console.warn('saveWatchlist error:', e);
+  }
   updateWlCount();
 }
 function clearAllWatchlist() {
-  if (!confirm('確定要清空所有追蹤清單嗎？')) return;
+  const current = loadWatchlist();
+  if (current.length === 0) return;
+  if (!confirm(`確定要清空所有追蹤清單（共 ${current.length} 檔）嗎？\n\n💡 建議您清空前可先點擊「💾 備份」下載備份檔！`)) return;
+  try {
+    // 備份到被刪除安全槽，以防誤觸
+    localStorage.setItem('tsai_watchlist_deleted_backup', JSON.stringify(current));
+  } catch(e){}
   saveWatchlist([]);
   renderWatchlist();
+}
+
+// ── 💾 匯出追蹤清單備份 (JSON 檔) ──
+function wlExportBackup() {
+  try {
+    const list = loadWatchlist();
+    if (!list || list.length === 0) {
+      alert('目前追蹤清單尚無任何股票，請先加入自選股後再備份！');
+      return;
+    }
+    let pinned = [];
+    try { pinned = JSON.parse(localStorage.getItem('tsai_pinned_v1') || '[]'); } catch(e){}
+    let alerts = [];
+    try { alerts = JSON.parse(localStorage.getItem('tsai_wl_alerts_v1') || '[]'); } catch(e){}
+
+    const now = new Date();
+    const dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+    const timeStr = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+
+    const backupData = {
+      app: '台股AI分析器',
+      version: '2.0',
+      exportTime: now.toISOString(),
+      exportTimeFormatted: `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${timeStr}`,
+      totalCount: list.length,
+      watchlist: list,
+      pinned: pinned,
+      alerts: alerts
+    };
+
+    const jsonString = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `台股AI_追蹤清單備份_${dateStr}_${timeStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === 'function') {
+      showToast(`💾 已成功匯出備份！包含 ${list.length} 檔追蹤股票`);
+    } else {
+      alert(`💾 已成功匯出追蹤清單備份檔！\n\n共包含 ${list.length} 檔追蹤股票與持倉記錄。\n請妥善保存此 JSON 檔，可隨時在任何設備一鍵「還原」。`);
+    }
+  } catch (err) {
+    console.error('wlExportBackup error:', err);
+    alert('匯出備份失敗：' + err.message);
+  }
+}
+
+// ── 📂 匯入還原追蹤清單 (JSON 檔) ──
+function wlImportBackup() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.style.display = 'none';
+
+  input.onchange = function(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      try {
+        const content = event.target.result;
+        const data = JSON.parse(content);
+        let importedList = [];
+        let importedPinned = null;
+        let importedAlerts = null;
+
+        if (Array.isArray(data)) {
+          importedList = data;
+        } else if (data && typeof data === 'object') {
+          if (Array.isArray(data.watchlist)) importedList = data.watchlist;
+          else if (Array.isArray(data.list)) importedList = data.list;
+          if (Array.isArray(data.pinned)) importedPinned = data.pinned;
+          if (Array.isArray(data.alerts)) importedAlerts = data.alerts;
+        }
+
+        if (!Array.isArray(importedList) || importedList.length === 0) {
+          alert('⚠️ 備份檔案中未找到有效的追蹤清單資料！');
+          return;
+        }
+
+        // 智慧合併：將匯入資料與現有清單合併，以股票代碼去重
+        const currentList = loadWatchlist();
+        const map = new Map();
+        currentList.forEach(item => {
+          if (item && item.id) map.set(String(item.id).trim(), item);
+        });
+
+        let newCount = 0;
+        importedList.forEach(rawItem => {
+          if (!rawItem) return;
+          const id = String(rawItem.id || rawItem.code || rawItem).trim();
+          if (!id) return;
+
+          const dbInfo = (typeof STOCK_DB !== 'undefined') ? STOCK_DB[id] : null;
+          const name = rawItem.name || dbInfo?.name || id;
+          const industry = rawItem.industry || dbInfo?.industry || '';
+
+          if (map.has(id)) {
+            // 已存在則更新備忘或持倉（若原本為空而匯入有值）
+            const cur = map.get(id);
+            if (!cur.note && rawItem.note) cur.note = rawItem.note;
+            if ((!cur.lots || cur.lots.length === 0) && Array.isArray(rawItem.lots) && rawItem.lots.length > 0) {
+              cur.lots = rawItem.lots;
+            }
+            if (!cur.tags && rawItem.tags) cur.tags = rawItem.tags;
+          } else {
+            const newItem = (typeof rawItem === 'object') ? { ...rawItem, id, name, industry } : { id, name, industry, addedAt: new Date().toISOString() };
+            map.set(id, newItem);
+            newCount++;
+          }
+        });
+
+        const merged = Array.from(map.values());
+        saveWatchlist(merged);
+
+        // 合併 pinned
+        if (importedPinned && importedPinned.length > 0) {
+          try {
+            const curPin = JSON.parse(localStorage.getItem('tsai_pinned_v1') || '[]');
+            const pinSet = new Set([...curPin, ...importedPinned]);
+            localStorage.setItem('tsai_pinned_v1', JSON.stringify(Array.from(pinSet)));
+          } catch(e){}
+        }
+
+        // 合併 alerts
+        if (importedAlerts && importedAlerts.length > 0) {
+          try {
+            const curAlt = JSON.parse(localStorage.getItem('tsai_wl_alerts_v1') || '[]');
+            const altMap = new Map();
+            curAlt.forEach(a => { if (a && a.id) altMap.set(a.id, a); });
+            importedAlerts.forEach(a => { if (a && a.id && !altMap.has(a.id)) altMap.set(a.id, a); });
+            localStorage.setItem('tsai_wl_alerts_v1', JSON.stringify(Array.from(altMap.values())));
+          } catch(e){}
+        }
+
+        renderWatchlist();
+
+        alert(`✅ 成功還原備份！\n\n• 新增匯入：${newCount} 檔\n• 目前追蹤總計：${merged.length} 檔\n\n所有備忘筆記與自選清單已安全就緒！`);
+      } catch (err) {
+        console.error('wlImportBackup parse error:', err);
+        alert('❌ 讀取備份檔案失敗，請確認檔案格式是否正確！\n錯誤訊息：' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  document.body.appendChild(input);
+  input.click();
+  setTimeout(() => {
+    try { document.body.removeChild(input); } catch(e){}
+  }, 1000);
 }
 
 // ══════════════════════════════════════════════════════════════
