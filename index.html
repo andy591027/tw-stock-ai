@@ -20851,47 +20851,56 @@ a.module-nav-item.acc-active {
     <div class="wl-report-body" id="wlReportBody"></div>
   </div>
 
-  <!-- ☁️ 跨設備雲端同步面板（電腦 / 平板 / 手機 資料庫互通） -->
-  <div class="wl-report-panel" id="wlCloudSyncPanel">
-    <div class="wl-report-header" style="background:linear-gradient(135deg, #0D47A1 0%, #1976D2 100%);">
-      <span>☁️ 跨設備雲端同步（電腦 · 手機 · 平板）</span>
-      <button onclick="document.getElementById('wlCloudSyncPanel').classList.remove('show')"
-        style="background:none;border:none;cursor:pointer;color:#fff;font-size:1.1rem;padding:0 4px;">✕</button>
+<!-- ☁️ 跨設備雲端同步 獨立置中彈出視窗 (Modal) -->
+<div class="wl-modal-wall" id="wlCloudSyncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:999999;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:16px;">
+  <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:14px;width:100%;max-width:440px;box-shadow:0 16px 48px rgba(0,0,0,0.4);overflow:hidden;display:flex;flex-direction:column;animation:wlPopIn 0.2s ease-out;">
+    <!-- 標題列 -->
+    <div style="background:linear-gradient(135deg, #1E40AF 0%, #2563EB 100%);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.92rem;font-weight:800;">
+        <span>☁️ 跨設備雲端同步</span>
+      </div>
+      <button onclick="closeCloudSyncModal()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;">✕</button>
     </div>
-    <div style="padding:12px 14px;font-size:0.72rem;color:var(--fg2);line-height:1.6;display:flex;flex-direction:column;gap:10px;">
-      <div style="background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);padding:8px 10px;border-radius:8px;">
-        <div style="font-weight:800;color:#1D4ED8;display:flex;align-items:center;gap:4px;margin-bottom:3px;">
-          <span>📱 讓三個設備隨時共用同一個資料庫</span>
-        </div>
-        <div>在電腦設定好自選股與持倉成本後，點擊下方<b>「一鍵上傳 / 複製同步碼」</b>；在手機或平板打開網頁點<b>「一鍵同步載入」</b>，1 秒鐘即可全量同步！</div>
+
+    <!-- 內容區 -->
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;font-size:0.75rem;color:var(--fg2);">
+      <div style="background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.2);padding:10px 12px;border-radius:8px;line-height:1.5;">
+        <b style="color:#1D4ED8;">📱 電腦 · 平板 · 手機 三端共用同一資料庫</b><br>
+        <span style="font-size:0.68rem;color:var(--fg3);">在電腦設定好股票後點下方「上傳/複製」，手機或平板打開點「同步載入」，1秒完成同步！</span>
       </div>
 
-      <!-- 操作區 -->
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="display:flex;gap:6px;">
-          <button class="btn-primary" onclick="wlGenerateSyncCode()" style="flex:1;padding:9px 12px;font-size:0.75rem;font-weight:800;border-radius:8px;background:#2563EB;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
-            <span>⬆️ 一鍵上傳 / 複製同步碼</span>
-          </button>
-          <button class="btn-primary" onclick="wlPasteSyncCode()" style="flex:1;padding:9px 12px;font-size:0.75rem;font-weight:800;border-radius:8px;background:#059669;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
-            <span>⬇️ 一鍵從雲端同步載入</span>
-          </button>
-        </div>
+      <!-- 兩大核心操作按鈕 -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="wlGenerateSyncCode()" style="padding:13px;font-size:0.86rem;font-weight:800;border-radius:8px;background:linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);color:#fff;border:none;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.3);display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span>⬆️ 一鍵上傳 / 複製同步碼</span>
+        </button>
 
-        <!-- 同步代碼文字框 -->
-        <textarea id="wlSyncCodeBox" placeholder="點擊「⬆️ 一鍵上傳 / 複製同步碼」後，此處會產出資料同步碼（直接在手機/平板貼上即可同步）…" style="width:100%;height:65px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--fg);font-size:0.65rem;font-family:monospace;resize:none;"></textarea>
+        <button onclick="wlPasteSyncCode()" style="padding:13px;font-size:0.86rem;font-weight:800;border-radius:8px;background:linear-gradient(135deg, #059669 0%, #047857 100%);color:#fff;border:none;cursor:pointer;box-shadow:0 2px 6px rgba(5,150,105,0.3);display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span>⬇️ 一鍵從雲端同步載入</span>
+        </button>
       </div>
 
-      <div id="wlSyncStatus" style="font-size:0.68rem;font-weight:700;min-height:16px;"></div>
+      <!-- 同步碼框 -->
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.65rem;color:var(--fg3);">
+          <span>同步代碼（點擊上方按鈕後自動填入或貼上）：</span>
+        </div>
+        <textarea id="wlSyncCodeBox" placeholder="點擊「⬆️ 一鍵上傳」會自動產出並複製；在手機/平板點「⬇️ 同步載入」可自動讀取或在此貼上…" style="width:100%;height:60px;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-family:monospace;font-size:0.65rem;resize:none;"></textarea>
+      </div>
 
-      <div style="border-top:1px dashed var(--border);padding-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:0.62rem;color:var(--fg3);">或使用檔案備份還原：</span>
+      <div id="wlSyncStatus" style="font-size:0.72rem;font-weight:700;min-height:18px;text-align:center;"></div>
+
+      <!-- 傳統備份捷徑 -->
+      <div style="border-top:1px dashed var(--border);padding-top:10px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:0.64rem;color:var(--fg3);">或使用檔案備份還原：</span>
         <div style="display:flex;gap:6px;">
-          <button class="wl-sort-btn" onclick="wlExportBackup()" style="font-size:0.62rem;padding:3px 8px;">💾 下載備份檔</button>
-          <button class="wl-sort-btn" onclick="wlImportBackup()" style="font-size:0.62rem;padding:3px 8px;">📂 選擇檔案還原</button>
+          <button class="wl-sort-btn" onclick="wlExportBackup()" style="font-size:0.65rem;padding:4px 9px;">💾 下載備份檔</button>
+          <button class="wl-sort-btn" onclick="wlImportBackup()" style="font-size:0.65rem;padding:4px 9px;">📂 選檔案還原</button>
         </div>
       </div>
     </div>
   </div>
+</div>
 
   <!-- 📧 每日07:00重大訊息通知設定面板（2026-09-13新增） -->
   <div class="wl-report-panel" id="wlNotifyPanel">
@@ -86850,12 +86859,25 @@ function renderWlBuyAlerts() {
 //  ☁️ 跨設備雲端同步邏輯（電腦 / 平板 / 手機 同步）
 // ============================================================
 function wlToggleCloudSyncPanel() {
-  const panel = document.getElementById('wlCloudSyncPanel');
-  if (!panel) return;
-  panel.classList.toggle('show');
+  const modal = document.getElementById('wlCloudSyncModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
   const statusEl = document.getElementById('wlSyncStatus');
   if (statusEl) statusEl.textContent = '';
 }
+
+function closeCloudSyncModal() {
+  const modal = document.getElementById('wlCloudSyncModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// 點擊彈窗外部背景自動關閉
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('wlCloudSyncModal');
+  if (modal && e.target === modal) {
+    modal.style.display = 'none';
+  }
+});
 
 function wlGenerateSyncCode() {
   const statusEl = document.getElementById('wlSyncStatus');
