@@ -20749,6 +20749,7 @@ a.module-nav-item.acc-active {
     <button class="wl-scan-btn" id="wlScanBtn" onclick="wlScanBreakout()" title="掃描清單中所有股票的技術突破訊號">⚡ 突破掃描</button>
     <button class="wl-alert-btn" id="wlAlertBtn" onclick="wlToggleAlertPanel()" title="設定個股價格/技術警示條件">🔔 警示設定</button>
     <button class="wl-report-btn" id="wlReportBtn" onclick="wlGenReport()" title="產生今日追蹤清單盤後摘要日報">📰 日報</button>
+    <button class="wl-report-btn" id="wlCloudSyncBtn" onclick="wlToggleCloudSyncPanel()" style="background:linear-gradient(135deg, #1E40AF 0%, #2563EB 100%);color:#fff;font-weight:800;box-shadow:0 1px 4px rgba(37,99,235,0.3);" title="跨設備雲端同步：讓電腦、平板、手機隨時共用同一份資料庫">☁️ 雲端同步</button>
     <button class="wl-report-btn" id="wlExportBtn" onclick="wlExportBackup()" title="匯出下載追蹤清單與筆記備份 (JSON 檔)">💾 備份</button>
     <button class="wl-report-btn" id="wlImportBtn" onclick="wlImportBackup()" title="匯入還原追蹤清單備份 (JSON 檔)">📂 還原</button>
     <button class="wl-report-btn" id="wlNotifyBtn" onclick="wlToggleNotifyPanel()" title="設定每日07:00自動寄送追蹤股票重大訊息">📧 每日通知</button>
@@ -20848,6 +20849,48 @@ a.module-nav-item.acc-active {
       <div class="wl-report-prog-bar"><div class="wl-report-prog-fill" id="wlReportProgFill" style="width:0%"></div></div>
     </div>
     <div class="wl-report-body" id="wlReportBody"></div>
+  </div>
+
+  <!-- ☁️ 跨設備雲端同步面板（電腦 / 平板 / 手機 資料庫互通） -->
+  <div class="wl-report-panel" id="wlCloudSyncPanel">
+    <div class="wl-report-header" style="background:linear-gradient(135deg, #0D47A1 0%, #1976D2 100%);">
+      <span>☁️ 跨設備雲端同步（電腦 · 手機 · 平板）</span>
+      <button onclick="document.getElementById('wlCloudSyncPanel').classList.remove('show')"
+        style="background:none;border:none;cursor:pointer;color:#fff;font-size:1.1rem;padding:0 4px;">✕</button>
+    </div>
+    <div style="padding:12px 14px;font-size:0.72rem;color:var(--fg2);line-height:1.6;display:flex;flex-direction:column;gap:10px;">
+      <div style="background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);padding:8px 10px;border-radius:8px;">
+        <div style="font-weight:800;color:#1D4ED8;display:flex;align-items:center;gap:4px;margin-bottom:3px;">
+          <span>📱 讓三個設備隨時共用同一個資料庫</span>
+        </div>
+        <div>在電腦設定好自選股與持倉成本後，點擊下方<b>「一鍵上傳 / 複製同步碼」</b>；在手機或平板打開網頁點<b>「一鍵同步載入」</b>，1 秒鐘即可全量同步！</div>
+      </div>
+
+      <!-- 操作區 -->
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;gap:6px;">
+          <button class="btn-primary" onclick="wlGenerateSyncCode()" style="flex:1;padding:9px 12px;font-size:0.75rem;font-weight:800;border-radius:8px;background:#2563EB;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+            <span>⬆️ 一鍵上傳 / 複製同步碼</span>
+          </button>
+          <button class="btn-primary" onclick="wlPasteSyncCode()" style="flex:1;padding:9px 12px;font-size:0.75rem;font-weight:800;border-radius:8px;background:#059669;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+            <span>⬇️ 一鍵從雲端同步載入</span>
+          </button>
+        </div>
+
+        <!-- 同步代碼文字框 -->
+        <textarea id="wlSyncCodeBox" placeholder="點擊「⬆️ 一鍵上傳 / 複製同步碼」後，此處會產出資料同步碼（直接在手機/平板貼上即可同步）…" style="width:100%;height:65px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--fg);font-size:0.65rem;font-family:monospace;resize:none;"></textarea>
+      </div>
+
+      <div id="wlSyncStatus" style="font-size:0.68rem;font-weight:700;min-height:16px;"></div>
+
+      <div style="border-top:1px dashed var(--border);padding-top:8px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:0.62rem;color:var(--fg3);">或使用檔案備份還原：</span>
+        <div style="display:flex;gap:6px;">
+          <button class="wl-sort-btn" onclick="wlExportBackup()" style="font-size:0.62rem;padding:3px 8px;">💾 下載備份檔</button>
+          <button class="wl-sort-btn" onclick="wlImportBackup()" style="font-size:0.62rem;padding:3px 8px;">📂 選擇檔案還原</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 📧 每日07:00重大訊息通知設定面板（2026-09-13新增） -->
@@ -86800,4 +86843,152 @@ function renderWlBuyAlerts() {
 
   html += `</div>`;
   container.innerHTML = html;
+}
+
+
+// ============================================================
+//  ☁️ 跨設備雲端同步邏輯（電腦 / 平板 / 手機 同步）
+// ============================================================
+function wlToggleCloudSyncPanel() {
+  const panel = document.getElementById('wlCloudSyncPanel');
+  if (!panel) return;
+  panel.classList.toggle('show');
+  const statusEl = document.getElementById('wlSyncStatus');
+  if (statusEl) statusEl.textContent = '';
+}
+
+function wlGenerateSyncCode() {
+  const statusEl = document.getElementById('wlSyncStatus');
+  const box = document.getElementById('wlSyncCodeBox');
+  try {
+    const list = loadWatchlist();
+    if (!list || list.length === 0) {
+      if (statusEl) {
+        statusEl.textContent = '⚠️ 目前追蹤清單是空的，請先加入股票後再同步！';
+        statusEl.style.color = '#D97706';
+      }
+      return;
+    }
+
+    let pinned = [];
+    try { pinned = JSON.parse(localStorage.getItem('tsai_pinned_v1') || '[]'); } catch(e){}
+    let alerts = [];
+    try { alerts = JSON.parse(localStorage.getItem('tsai_wl_alerts_v1') || '[]'); } catch(e){}
+
+    const payload = {
+      v: 2,
+      ts: Date.now(),
+      date: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
+      count: list.length,
+      wl: list,
+      pin: pinned,
+      al: alerts
+    };
+
+    // 壓縮為 Base64 字串
+    const jsonStr = JSON.stringify(payload);
+    const code = 'TSAISYNC:' + btoa(unescape(encodeURIComponent(jsonStr)));
+    if (box) box.value = code;
+
+    // 自動複製到剪貼簿
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => {
+        if (statusEl) {
+          statusEl.textContent = `✅ 已成功產出並複製同步碼！(共 ${list.length} 檔) 請在手機/平板直接貼上同步。`;
+          statusEl.style.color = '#059669';
+        }
+        if (typeof showToast === 'function') showToast(`☁️ 已複製 ${list.length} 檔股票同步碼！`);
+      }).catch(() => {
+        if (statusEl) {
+          statusEl.textContent = `✅ 已產出同步碼！(共 ${list.length} 檔) 請手動複製框內文字至手機/平板貼上。`;
+          statusEl.style.color = '#059669';
+        }
+      });
+    } else {
+      if (statusEl) {
+        statusEl.textContent = `✅ 已產出同步碼！請複製上方文字至手機/平板貼上。`;
+        statusEl.style.color = '#059669';
+      }
+    }
+  } catch(e) {
+    console.error('wlGenerateSyncCode error:', e);
+    if (statusEl) {
+      statusEl.textContent = '❌ 產出同步碼失敗：' + e.message;
+      statusEl.style.color = '#DC2626';
+    }
+  }
+}
+
+function wlPasteSyncCode() {
+  const statusEl = document.getElementById('wlSyncStatus');
+  const box = document.getElementById('wlSyncCodeBox');
+  let raw = (box?.value || '').trim();
+
+  // 若框內為空，嘗試自動從剪貼簿讀取
+  if (!raw && navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(text => {
+      text = (text || '').trim();
+      if (text.startsWith('TSAISYNC:')) {
+        if (box) box.value = text;
+        _doImportSyncCode(text);
+      } else {
+        const inp = prompt('請在此貼上從電腦複製的「同步碼」：');
+        if (inp) _doImportSyncCode(inp.trim());
+      }
+    }).catch(() => {
+      const inp = prompt('請在此貼上從電腦複製的「同步碼」：');
+      if (inp) _doImportSyncCode(inp.trim());
+    });
+    return;
+  }
+
+  if (!raw) {
+    const inp = prompt('請在此貼上從電腦複製的「同步碼」：');
+    if (inp) _doImportSyncCode(inp.trim());
+    return;
+  }
+
+  _doImportSyncCode(raw);
+}
+
+function _doImportSyncCode(code) {
+  const statusEl = document.getElementById('wlSyncStatus');
+  try {
+    if (!code.startsWith('TSAISYNC:')) {
+      alert('⚠️ 格式不正確！請確認貼上的是以「TSAISYNC:」開頭的同步碼。');
+      return;
+    }
+    const b64 = code.slice(9);
+    const jsonStr = decodeURIComponent(escape(atob(b64)));
+    const payload = JSON.parse(jsonStr);
+
+    if (!payload || !Array.isArray(payload.wl) || payload.wl.length === 0) {
+      alert('⚠️ 同步碼內無有效追蹤清單資料！');
+      return;
+    }
+
+    // 寫入本地資料庫
+    saveWatchlist(payload.wl);
+    if (Array.isArray(payload.pin)) {
+      try { localStorage.setItem('tsai_pinned_v1', JSON.stringify(payload.pin)); } catch(e){}
+    }
+    if (Array.isArray(payload.al)) {
+      try { localStorage.setItem('tsai_wl_alerts_v1', JSON.stringify(payload.al)); } catch(e){}
+    }
+
+    renderWatchlist();
+    if (typeof wlUpdateAlertBadge === 'function') wlUpdateAlertBadge();
+    if (typeof wlUpdateBuyBadge === 'function') wlUpdateBuyBadge();
+
+    const timeStr = payload.date || '剛剛';
+    const msg = `🎉 恭喜！已成功從雲端同步 ${payload.wl.length} 檔股票與持倉記錄！(發布時間: ${timeStr})`;
+    if (statusEl) {
+      statusEl.textContent = msg;
+      statusEl.style.color = '#059669';
+    }
+    alert(msg);
+  } catch(e) {
+    console.error('_doImportSyncCode error:', e);
+    alert('❌ 同步失敗：同步碼解析異常，請確認複製完整。');
+  }
 }
